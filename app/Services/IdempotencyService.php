@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\IdempotencyConflict;
+use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -11,10 +12,12 @@ use RuntimeException;
  * Idempotencia por clave de cliente.
  *
  * Flujo (todo en una transacción):
- *  1. Si la clave existe pero venció, se descarta.
- *  2. INSERT ... ON CONFLICT DO NOTHING; si otra transacción está ejecutando
+ *  1. INSERT ... ON CONFLICT DO NOTHING; si otra transacción está ejecutando
  *     la misma clave, este INSERT espera y luego no inserta nada.
- *  3. SELECT ... FOR UPDATE y comparación del hash canónico del request.
+ *  2. SELECT ... FOR UPDATE y comparación del hash canónico del request.
+ *  3. Si la fila está vencida, se reutiliza in-place (se resetea) en lugar de
+ *     borrarla y reinsertarla: una sola fila bloqueada, sin carrera entre
+ *     DELETE e INSERT.
  *  4. Si ya hay respuesta (response_status != NULL) → replay.
  *     Si no, se ejecuta la operación y se guarda el resultado.
  *
@@ -37,10 +40,7 @@ final class IdempotencyService
         $hash = $this->hash($endpoint, $userId, $payload);
 
         return DB::transaction(function () use ($key, $endpoint, $hash, $operation) {
-            DB::table('idempotency_keys')
-                ->where('key', $key)
-                ->whereRaw('expires_at <= now()')
-                ->delete();
+            $now = now()->utc();
 
             DB::table('idempotency_keys')->insertOrIgnore([
                 'key' => $key,
@@ -48,8 +48,8 @@ final class IdempotencyService
                 'request_hash' => $hash,
                 'response_status' => null,
                 'response_body' => null,
-                'created_at' => now()->utc(),
-                'expires_at' => now()->utc()->addHours((int) config('slotlock.idempotency_ttl_hours')),
+                'created_at' => $now,
+                'expires_at' => $now->copy()->addHours((int) config('slotlock.idempotency_ttl_hours')),
             ]);
 
             $row = DB::table('idempotency_keys')
@@ -59,6 +59,23 @@ final class IdempotencyService
 
             if ($row === null) {
                 throw new RuntimeException('Could not acquire the idempotency key row.');
+            }
+
+            if (CarbonImmutable::parse((string) $row->expires_at)->lessThanOrEqualTo($now)) {
+                DB::table('idempotency_keys')
+                    ->where('key', $key)
+                    ->update([
+                        'endpoint' => $endpoint,
+                        'request_hash' => $hash,
+                        'response_status' => null,
+                        'response_body' => null,
+                        'created_at' => $now,
+                        'expires_at' => $now->copy()->addHours((int) config('slotlock.idempotency_ttl_hours')),
+                    ]);
+
+                $row->request_hash = $hash;
+                $row->response_status = null;
+                $row->response_body = null;
             }
 
             if (! hash_equals($row->request_hash, $hash)) {

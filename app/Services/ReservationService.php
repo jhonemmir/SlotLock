@@ -35,6 +35,16 @@ final class ReservationService
         $this->assertValidWindow($resource, $startUtc, $endUtc);
 
         return DB::transaction(function () use ($resource, $startUtc, $endUtc, $user) {
+            // Serializa los intentos sobre el mismo recurso. La garantía
+            // sigue siendo el EXCLUDE; esto solo evita el ciclo de deadlocks
+            // de la restricción cuando N transacciones insertan a la vez
+            // (ver C8 en docs/spec/concurrencia.md). Se libera al terminar
+            // la transacción de nivel superior.
+            DB::select(
+                'select pg_advisory_xact_lock(hashtextextended(?::text, 0))',
+                [$resource->getKey()],
+            );
+
             // Un hold vencido no libera el índice por sí solo (ADR 0002).
             $this->expiry->forSlot($resource, $startUtc, $endUtc);
 

@@ -9,14 +9,14 @@ use App\Models\Resource;
 use App\Services\ReservationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ReservationFlowTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTruncation;
 
     private Resource $resource;
 
@@ -63,6 +63,10 @@ class ReservationFlowTest extends TestCase
     /**
      * La prueba que importa: la restricción de PostgreSQL rechaza el
      * solapamiento aunque no pase por el servicio de aplicación.
+     *
+     * La suite usa DatabaseTruncation (no RefreshDatabase): el INSERT falla
+     * en autocommit, sin una transacción de test envolvente que quede
+     * abortada por el 23P01.
      */
     public function test_postgres_rejects_overlapping_reservations(): void
     {
@@ -71,16 +75,19 @@ class ReservationFlowTest extends TestCase
         $this->insertReservation($start, $end, ReservationStatus::Held, $start->addMinutes(10));
 
         try {
-            DB::transaction(function () use ($start, $end) {
-                $this->insertReservation($start, $end, ReservationStatus::Confirmed);
-            });
+            $this->insertReservation($start, $end, ReservationStatus::Confirmed);
 
             $this->fail('Se esperaba una violación de la restricción de exclusión.');
         } catch (QueryException $e) {
             $this->assertSame('23P01', $e->errorInfo[0] ?? null);
         }
 
+        // La conexión sigue usable después del error.
         $this->assertSame(1, Reservation::count());
+
+        $this->insertReservation($end, $end->addHour(), ReservationStatus::Confirmed);
+
+        $this->assertSame(2, Reservation::count());
     }
 
     public function test_a_second_hold_for_the_same_slot_returns_409(): void
@@ -131,6 +138,28 @@ class ReservationFlowTest extends TestCase
         app(ReservationService::class)->confirm($reservation);
     }
 
+    /**
+     * El mapeo HTTP de HoldExpired vive en DomainException::render().
+     * Este test lo verifica de punta a punta (y que withExceptions no
+     * lo pise).
+     */
+    public function test_confirming_an_expired_hold_through_the_api_returns_410(): void
+    {
+        [$start, $end] = $this->slot();
+
+        $reservation = Reservation::create([
+            'resource_id' => $this->resource->id,
+            'start_at' => $start,
+            'end_at' => $end,
+            'status' => ReservationStatus::Held,
+            'expires_at' => CarbonImmutable::now()->subMinute(),
+        ]);
+
+        $this->postJson("/api/reservations/{$reservation->id}/confirm")
+            ->assertStatus(410)
+            ->assertJsonPath('error', 'hold_expired');
+    }
+
     public function test_cancelling_frees_the_slot(): void
     {
         [$start, $end] = $this->slot();
@@ -144,6 +173,19 @@ class ReservationFlowTest extends TestCase
 
         $this->assertTrue($replacement->isNot($reservation));
         $this->assertSame(ReservationStatus::Cancelled, $reservation->refresh()->status);
+    }
+
+    public function test_cancelling_twice_through_the_api_returns_409(): void
+    {
+        [$start, $end] = $this->slot();
+
+        $reservation = app(ReservationService::class)->hold($this->resource, $start, $end);
+
+        $this->deleteJson("/api/reservations/{$reservation->id}")->assertNoContent();
+
+        $this->deleteJson("/api/reservations/{$reservation->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('error', 'reservation_not_cancellable');
     }
 
     public function test_retry_with_the_same_idempotency_key_returns_the_same_reservation(): void
@@ -177,6 +219,36 @@ class ReservationFlowTest extends TestCase
         $this->postJson('/api/reservations', $payload, ['Idempotency-Key' => $key])
             ->assertStatus(409)
             ->assertJsonPath('error', 'idempotency_conflict');
+    }
+
+    public function test_an_expired_idempotency_key_can_be_reused(): void
+    {
+        $key = (string) Str::uuid();
+
+        $first = $this->postJson('/api/reservations', $this->payload(), [
+            'Idempotency-Key' => $key,
+        ])->assertCreated();
+
+        DB::table('idempotency_keys')->where('key', $key)->update([
+            // El CHECK exige expires_at > created_at: movemos ambos al pasado.
+            'created_at' => DB::raw("now() - interval '25 hours'"),
+            'expires_at' => DB::raw("now() - interval '1 minute'"),
+        ]);
+
+        [$start, $end] = $this->slot();
+        [$start, $end] = [$start->addDay(), $end->addDay()];
+
+        $second = $this->postJson('/api/reservations', [
+            'resource_id' => $this->resource->id,
+            'start_at' => $start->toIso8601String(),
+            'end_at' => $end->toIso8601String(),
+        ], ['Idempotency-Key' => $key])
+            ->assertCreated()
+            ->assertHeaderMissing('Idempotency-Replayed');
+
+        $this->assertNotSame($first->json('id'), $second->json('id'));
+        $this->assertDatabaseCount('reservations', 2);
+        $this->assertDatabaseCount('idempotency_keys', 1);
     }
 
     public function test_missing_idempotency_key_is_rejected(): void
