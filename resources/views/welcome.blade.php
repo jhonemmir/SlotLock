@@ -65,6 +65,7 @@
             <nav>
                 <a href="/api/resources">API</a>
                 <a href="/health">Health</a>
+                <a href="https://github.com/jhonemmir/SlotLock" rel="noreferrer">GitHub</a>
             </nav>
         </header>
 
