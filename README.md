@@ -59,7 +59,7 @@ la clave, corre las migraciones y siembra 3 recursos.
 Otros comandos:
 
 ```bash
-make test     # 17 tests contra PostgreSQL (crea slotlock_test si falta)
+make test     # 20 tests contra PostgreSQL (crea slotlock_test si falta)
 make fresh    # migrate:fresh + seed (borra los datos de demo)
 make psql     # sesión psql sobre la DB de desarrollo
 make lint     # Pint en modo verificación
@@ -146,18 +146,34 @@ El razonamiento completo está en [`docs/adr/0002-expiracion-de-holds.md`](docs/
 - La misma clave + payload distinto → `409 idempotency_conflict`.
 - El hash incluye endpoint + usuario + payload canónico, así una clave no puede
   replayar la respuesta de otro endpoint.
+- Una clave vencida se reutiliza in-place (se resetea la fila), sin `DELETE` +
+  `INSERT`; el comando de poda la elimina físicamente.
 - Si la operación falla, la transacción se revierte y la clave desaparece: el
   reintento vuelve a ejecutar la lógica, sin efectos parciales.
 
-### Deadlocks de la restricción
+### Deadlocks y orden de intentos
 
-Con muchas inserciones simultáneas sobre el mismo slot, PostgreSQL puede
-detectar un deadlock (`40P01`) mientras verifica la restricción `EXCLUDE` (es un
-comportamiento conocido de las exclusion constraints bajo contención). La
-transacción externa se reintenta hasta 5 veces; en el reintento, el ganador ya
-commiteó y el perdedor recibe `23P01` → `409`. Medido con 100 requests
-concurrentes: 1×201, 99×409, 0×500. Ver C8 en
-[`docs/spec/concurrencia.md`](docs/spec/concurrencia.md).
+La restricción `EXCLUDE` garantiza la exclusión, pero si N transacciones insertan
+el mismo rango a la vez, PostgreSQL puede detectar ciclos de locks (`40P01`)
+mientras verifica el índice; el detector mata una víctima por segundo y los
+reintentos inmediatos pueden entrar en livelock.
+
+Por eso, antes de tocar `reservations`, cada reserva toma un **advisory lock
+transaccional por recurso**:
+
+```sql
+SELECT pg_advisory_xact_lock(hashtextextended(:resource_id, 0));
+```
+
+Los intentos del mismo recurso se ordenan: el primero inserta y los demás
+reciben `23P01` → `409` sin ciclos. Recursos distintos siguen en paralelo. El
+lock se libera al terminar la transacción. Los reintentos (5) quedan como red de
+seguridad para otros cruces (por ejemplo, confirmación vs. inserción).
+
+Esto **no reemplaza la garantía**: si se quita el advisory lock, la restricción
+sigue impidiendo el solapamiento (el test de `23P01` lo prueba); solo empeora la
+latencia bajo contención extrema. Es una decisión de throughput, no de
+corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×500 en ~2 s.
 
 ### Zona horaria y granularidad
 
@@ -170,14 +186,18 @@ concurrentes: 1×201, 99×409, 0×500. Ver C8 en
 
 ### 1. Tests
 
-`make test` → **17 tests, 45 assertions**, contra PostgreSQL 16 real:
+`make test` → **20 tests, 58 assertions**, contra PostgreSQL 16 real:
 
 - El insert solapado recibe `23P01` **sin pasar por el servicio** (la restricción es la fuente de verdad).
 - Un hold vencido no bloquea y queda en `expired`.
-- Confirmar un hold vencido → `410`.
-- Cancelar libera el slot.
-- Retry con la misma clave → mismo `id`; payload distinto → `409`.
+- Confirmar un hold vencido → `410` (servicio y HTTP).
+- Cancelar libera el slot; cancelar dos veces → `409`.
+- Retry con la misma clave → mismo `id`; payload distinto → `409`; clave vencida → se reutiliza.
 - Disponibilidad marca `confirmed` y trata los holds vencidos como libres.
+
+La suite usa `DatabaseTruncation` en lugar de `RefreshDatabase`: el test que
+provoca `23P01` no queda dentro de una transacción abortada, y la conexión se
+verifica usable inmediatamente después del error.
 
 ### 2. Concurrencia HTTP (verificación manual)
 
@@ -197,13 +217,10 @@ $ select status, count(*) from reservations where resource_id = '...' group by 1
  held | 1
 ```
 
-Durante la corrida se producen deadlocks transitorios de la restricción
-(`40P01`), absorbidos por los reintentos de transacción: 0 respuestas `500`.
-La prueba de carga formal (k6 con 100 VUs, p95 y throughput) es la fase 3
-pendiente. No se publican números que no estén medidos.
-
-La prueba de carga formal (k6 con 100 VUs, p95 y throughput) es la fase 3 pendiente.
-No se publican números que no estén medidos.
+Durante la corrida no hay respuestas `500`: la serialización por recurso evita
+los ciclos de deadlocks y los reintentos de transacción quedan como red de
+seguridad. La prueba de carga formal (k6 con 100 VUs, p95 y throughput) es la
+fase 3 pendiente. No se publican números que no estén medidos.
 
 ### 3. Planes de ejecución
 

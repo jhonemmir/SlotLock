@@ -136,6 +136,7 @@ transacción de la nueva reserva + job de higiene cada minuto. Ver
 - Si se reintenta con la misma clave y mismo body → misma respuesta (201 con el mismo `id`, header `Idempotency-Replayed: true`).
 - Reintentar con la misma clave y body distinto → 409 `idempotency_conflict`.
 - El hash es canónico: `sha256(endpoint + user_id + payload ordenado)`; así la misma clave usada en otro endpoint no replaya una respuesta ajena.
+- Una clave vencida se reutiliza in-place (se resetean hash y respuesta), sin `DELETE` + `INSERT`; el comando `slotlock:prune-idempotency` la elimina físicamente.
 - Solo se cachean respuestas exitosas. Si la operación falla, la transacción se revierte y la clave desaparece: el reintento vuelve a ejecutar la lógica, sin efectos parciales.
 
 ## Cancelación

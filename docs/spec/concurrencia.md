@@ -110,31 +110,39 @@ El `ORDER BY id` fija el orden de locks entre transacciones concurrentes. El `IN
 
 Cada VU debe enviar una `Idempotency-Key` **distinta**; si comparten clave, el test mide replays de idempotencia (N × 201) y no la exclusión. El escenario de retry es el único que reusa la clave.
 
-### C8 — Deadlocks y reintentos
+### C8 — Deadlocks y orden de intentos
 
 Con muchas inserciones simultáneas sobre el mismo slot, PostgreSQL puede
-detectar un deadlock (`40P01`) mientras verifica la restricción `EXCLUDE`: cada
-transacción espera por otra que, a su vez, espera por una tercera. Es un
-comportamiento conocido de las exclusion constraints bajo contención, no un bug
-de la aplicación.
+detectar ciclos de locks (`40P01`) mientras verifica la restricción `EXCLUDE`:
+cada transacción espera por otra que, a su vez, espera por una tercera. El
+deadlock detector mata una víctima por segundo, y un reintento inmediato puede
+volver a entrar en el ciclo (livelock) bajo contención alta.
 
 Reglas implementadas:
 
-- La transacción externa (la de idempotencia, que envuelve todo el request) se
-  reintenta hasta **5 veces** (`DB::transaction($fn, attempts: 5)`). En el
-  reintento, el ganador ya commiteó y el perdedor recibe `23P01` → `409`.
+- **Serialización por recurso**: antes de la limpieza y del `INSERT`, la
+  transacción toma `pg_advisory_xact_lock(hashtextextended(resource_id, 0))`.
+  Los intentos del mismo recurso se ordenan; el primero inserta y los demás
+  reciben `23P01` → `409`. Recursos distintos siguen en paralelo. Se libera al
+  terminar la transacción de nivel superior.
+- **Reintentos como red de seguridad**: la transacción externa (idempotencia)
+  se reintenta hasta 5 veces para cruces menos frecuentes (confirmación vs.
+  inserción, por ejemplo). No se reintenta `23P01`: es un resultado de dominio.
 - La limpieza de holds ordena por `id` antes de `FOR UPDATE`.
 - La promoción de waitlist usará `ORDER BY created_at, id` + `FOR UPDATE SKIP LOCKED` (fase 5).
-- No se reintenta `23P01`: es un resultado de dominio (409), no un fallo transitorio.
 
-**Medición:** 100 requests concurrentes al mismo slot → 1×201, 99×409, 0×500,
-con deadlocks transitorios absorbidos por los reintentos (ver `scripts/concurrency.sh`).
+**La garantía no depende del advisory lock**: es una decisión de throughput
+para evitar el livelock; si se quita, el `EXCLUDE` sigue impidiendo el
+solapamiento (el test de `23P01` lo verifica).
+
+**Medición:** 100 requests concurrentes al mismo slot → 1×201, 99×409, 0×500 en
+~2 s, y una segunda corrida → 100×409 (`scripts/concurrency.sh`).
 
 ## Estrategia de locking resumida
 
 | Operación | Mecanismo |
 |---|---|
-| Crear reserva | limpieza oportunista de holds vencidos + `EXCLUDE` (GiST) que serializa por recurso+rango |
+| Crear reserva | advisory lock por recurso + limpieza oportunista de holds vencidos + `EXCLUDE` (GiST) que serializa por recurso+rango |
 | Confirmar hold | `UPDATE ... WHERE status='held' AND expires_at > now()` (row lock implícito) |
 | Cancelar | `UPDATE ... WHERE id=?` (row lock) + índice EXCLUDE |
 | Expirar holds | `UPDATE ... WHERE status='held' AND expires_at<=now()` ordenado por `id` (`FOR UPDATE`) + job cada minuto |
@@ -187,4 +195,6 @@ CREATE UNIQUE INDEX idx_waitlist_unique_waiting
 - [x] Test: cancelación libera el slot.
 - [x] Test: retry con la misma idempotency key → mismo `id`.
 - [x] Test: la misma key con payload distinto → 409.
+- [x] Test: clave de idempotencia vencida → se reutiliza (no 409).
+- [x] Test: cancelar dos veces → 409 y confirmar vencido por HTTP → 410.
 - [ ] Test: promoción de waitlist sin duplicados. *(fase 5)*

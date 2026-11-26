@@ -33,7 +33,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] CI: PostgreSQL 16 + migraciones + aserción de la restricción + Pint.
 - [x] App dockerizada con PHP-FPM (40 workers) para concurrencia real.
 - [x] README, ADR y specs sincronizados con el código.
-- **Entregable:** `make test` (17 tests) verde en local y en CI.
+- **Entregable:** `make test` (20 tests) verde en local y en CI.
 
 ## Fase 2 — API de reservas (núcleo) ✅
 
