@@ -21,6 +21,33 @@ a sí misma por `http://127.0.0.1:$PORT`, y `RUN_MIGRATIONS=true` ejecuta
 3. Opcional: ejecutar `CREATE EXTENSION IF NOT EXISTS btree_gist;` en el SQL
    Editor. La migración también lo intenta; Neon permite crearla.
 
+#### Si ya tenés un proyecto en Neon
+
+Se puede reutilizar, pero **no la misma base de datos**: Laravel crea tablas con
+nombres fijos (`users`, `sessions`, `cache`, `jobs`, `migrations`) y dos apps en
+la misma DB chocan. Opciones:
+
+- **Recomendado:** crear un proyecto nuevo para SlotLock (Neon free permite 100
+  proyectos; cuotas separadas de storage y CU-hours).
+- **Reutilizar el proyecto:** crear una base nueva y apuntar el `DATABASE_URL` a
+  ella:
+
+  ```sql
+  -- en el SQL Editor, conectado a la DB por defecto del proyecto
+  CREATE DATABASE slotlock;
+  ```
+
+  Luego usá el connection string con `/slotlock` al final (mismo host/usuario).
+  Las cuotas de storage y compute del proyecto se comparten, pero la demo es
+  chica: tablas de unos pocos MB y tráfico esporádico.
+- No uses una branch copiada de tu otra app como DB de SlotLock: arrastra sus
+  tablas y datos.
+- `btree_gist` es por base: la migración la crea en `slotlock`; no afecta a la
+  otra app.
+
+En ambos casos, el compute de Neon escala a cero a los 5 minutos; sumado al
+cold start de Render, la primera visita puede tardar. Es esperable.
+
 ### 2. Render
 
 Con el blueprint [`render.yaml`](../render.yaml):
@@ -52,6 +79,7 @@ Free, Dockerfile `Dockerfile.prod`, health check `/health`, y las variables:
 | `LOG_CHANNEL` | `stderr` |
 | `MAIL_MAILER` | `log` |
 | `RUN_MIGRATIONS` | `true` |
+| `DB_SSLMODE` | `require` |
 | `DATABASE_URL` | Neon (directo) |
 | `APP_KEY` | `base64:...` |
 | `APP_URL` | URL de Render |
