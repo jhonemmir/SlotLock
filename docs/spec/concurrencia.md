@@ -122,9 +122,13 @@ Reglas implementadas:
 
 - **Serialización por recurso**: antes de la limpieza y del `INSERT`, la
   transacción toma `pg_advisory_xact_lock(hashtextextended(resource_id, 0))`.
-  Los intentos del mismo recurso se ordenan; el primero inserta y los demás
-  reciben `23P01` → `409`. Recursos distintos siguen en paralelo. Se libera al
-  terminar la transacción de nivel superior.
+  PostgreSQL no tiene un advisory lock por UUID nativo: `hashtextextended`
+  convierte el UUID en un `bigint` estable de 64 bits, que es la clave que
+  espera `pg_advisory_xact_lock`. Los intentos del mismo recurso se ordenan; el
+  primero inserta y los demás reciben `23P01` → `409`. Recursos distintos siguen
+  en paralelo. Se libera al terminar la transacción de nivel superior. Una
+  colisión de hash solo haría que dos recursos se serialicen entre sí; no afecta
+  la corrección.
 - **Reintentos como red de seguridad**: la transacción externa (idempotencia)
   se reintenta hasta 5 veces para cruces menos frecuentes (confirmación vs.
   inserción, por ejemplo). No se reintenta `23P01`: es un resultado de dominio.

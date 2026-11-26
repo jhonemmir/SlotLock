@@ -165,6 +165,10 @@ transaccional por recurso**:
 SELECT pg_advisory_xact_lock(hashtextextended(:resource_id, 0));
 ```
 
+PostgreSQL no tiene un advisory lock por UUID nativo: `hashtextextended`
+convierte el UUID en un `bigint` estable de 64 bits, que es la clave que espera
+`pg_advisory_xact_lock`.
+
 Los intentos del mismo recurso se ordenan: el primero inserta y los demás
 reciben `23P01` → `409` sin ciclos. Recursos distintos siguen en paralelo. El
 lock se libera al terminar la transacción. Los reintentos (5) quedan como red de
