@@ -1,30 +1,26 @@
-# Laravel
-/vendor/
-/node_modules/
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
 /public/hot
 /public/storage
 /storage/*.key
 /storage/pail
-.env
-.env.backup
-.env.production
-.phpunit.result.cache
-Homestead.json
-Homestead.yaml
-npm-debug.log
-yarn-error.log
-
-# IDE
-/.idea
-/.vscode
-*.swp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Docker
+/vendor
+# SlotLock / Docker
 pgdata/
-
-# Docs generados
 /docs/explain/*.txt
