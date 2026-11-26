@@ -49,15 +49,15 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [ ] Rate limiting.
 - **Entregable:** ciclo completo probado con `.http`/curl y tests. ✅
 
-## Fase 3 — Prueba de carga (evidencia técnica) ⏳
+## Fase 3 — Prueba de carga (evidencia técnica) ✅
 
 - [x] `EXPLAIN (ANALYZE, BUFFERS)` de disponibilidad y barrido → `docs/explain/`.
-- [x] Verificación manual: 100 requests concurrentes → 1×201, 99×409, 0×500 (`scripts/concurrency.sh`).
-- [ ] Script k6: mismo slot, N VUs → 1 éxito (claves de idempotencia distintas).
-- [ ] Script k6: slots distintos → N éxitos.
-- [ ] Script k6: retry idempotente (misma clave).
-- [ ] Documentar resultados en README (N, éxitos, rechazos, p95, throughput, hardware).
-- **Entregable:** evidencia reproducible; README con números reales.
+- [x] Verificación manual: 100 requests concurrentes → 1×201, 99×409, 0×5xx (`scripts/concurrency.sh`).
+- [x] Script k6: mismo slot, 100 VUs → 1×201, 99×409 (claves de idempotencia distintas).
+- [x] Script k6: slots distintos → 100×201.
+- [x] Script k6: retry idempotente concurrente → mismo `id`, 100 replays.
+- [x] Documentar resultados en README + `docs/evidence/k6.md` (N, 201, 409, 5xx, p95, p99, RPS, hardware).
+- **Entregable:** evidencia reproducible; README con números reales. ✅
 
 ## Fase 4 — Holds y expiración ✅
 
@@ -87,7 +87,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 ## Fase 7 — Pulido y documentación final ⏳
 
 - [x] README con quickstart, API, decisiones y evidencia parcial.
-- [ ] README con resultados k6.
+- [x] README con resultados k6.
 - [ ] Demo desplegada o asciinema.
 - [ ] (Opcional) programa en C/Go para latencia p99.
 - **Entregable:** proyecto listo para portafolio.

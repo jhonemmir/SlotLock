@@ -8,8 +8,8 @@
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Estado:** fases 0, 1, 1.5, 2 y 4 implementadas (núcleo + API + holds + tests + CI).
-Pendiente: k6 (fase 3) y frontend (fase 6). Ver [`docs/plan.md`](docs/plan.md).
+**Estado:** fases 0, 1, 1.5, 2, 3 y 4 implementadas (núcleo + API + holds + tests + CI + k6).
+Pendiente: waitlist (fase 5) y frontend (fase 6). Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -39,6 +39,7 @@ Además del núcleo, el proyecto implementa:
 - **Idempotencia obligatoria** por `Idempotency-Key` (UUID), con replay de la respuesta original.
 - **Disponibilidad** por día en la zona horaria del recurso.
 - **Tests contra PostgreSQL real** (nunca SQLite) y un test que verifica el SQLSTATE `23P01`.
+- **Prueba de carga con k6**: 100 requests concurrentes al mismo slot → 1×201 y 99×409.
 - **CI** con PostgreSQL 16, migraciones, aserción de la restricción y Pint.
 - **Entorno reproducible**: la app entera corre en Docker (PHP-FPM + nginx + scheduler).
 
@@ -61,6 +62,7 @@ Otros comandos:
 
 ```bash
 make test     # 20 tests contra PostgreSQL (crea slotlock_test si falta)
+make k6       # same-slot + distinct-slots + idempotent-retry
 make fresh    # migrate:fresh + seed (borra los datos de demo)
 make psql     # sesión psql sobre la DB de desarrollo
 make lint     # Pint en modo verificación
@@ -160,25 +162,27 @@ mientras verifica el índice; el detector mata una víctima por segundo y los
 reintentos inmediatos pueden entrar en livelock.
 
 Por eso, antes de tocar `reservations`, cada reserva toma un **advisory lock
-transaccional por recurso**:
+transaccional por recurso + día**:
 
 ```sql
-SELECT pg_advisory_xact_lock(hashtextextended(:resource_id, 0));
+SELECT pg_advisory_xact_lock(hashtextextended(:resource_id || ':' || :day, 0));
 ```
 
-PostgreSQL no tiene un advisory lock por UUID nativo: `hashtextextended`
-convierte el UUID en un `bigint` estable de 64 bits, que es la clave que espera
-`pg_advisory_xact_lock`.
+PostgreSQL no tiene un advisory lock por UUID ni por texto nativo:
+`hashtextextended` convierte la clave en un `bigint` estable de 64 bits, que es
+lo que espera `pg_advisory_xact_lock`. Se usa el **día local del recurso** para
+que reservas de días distintos no se bloqueen entre sí; si una reserva cruza
+medianoche, se toman los dos días en orden.
 
-Los intentos del mismo recurso se ordenan: el primero inserta y los demás
-reciben `23P01` → `409` sin ciclos. Recursos distintos siguen en paralelo. El
-lock se libera al terminar la transacción. Los reintentos (5) quedan como red de
+Los intentos del mismo recurso y día se ordenan: el primero inserta y los demás
+reciben `23P01` → `409` sin ciclos. Días distintos siguen en paralelo. El lock se
+libera al terminar la transacción. Los reintentos (5) quedan como red de
 seguridad para otros cruces (por ejemplo, confirmación vs. inserción).
 
 Esto **no reemplaza la garantía**: si se quita el advisory lock, la restricción
 sigue impidiendo el solapamiento (el test de `23P01` lo prueba); solo empeora la
 latencia bajo contención extrema. Es una decisión de throughput, no de
-corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×500 en ~2 s.
+corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 
 ### Zona horaria y granularidad
 
@@ -204,28 +208,34 @@ La suite usa `DatabaseTruncation` en lugar de `RefreshDatabase`: el test que
 provoca `23P01` no queda dentro de una transacción abortada, y la conexión se
 verifica usable inmediatamente después del error.
 
-### 2. Concurrencia HTTP (verificación manual)
+### 2. k6 (100 VUs sobre PostgreSQL)
 
-100 requests en paralelo al mismo slot, cada uno con su propia `Idempotency-Key`, a
-través de nginx → PHP-FPM (40 workers) → PostgreSQL:
+Tres escenarios con `grafana/k6` v2.4.0. Cada request usa su propia
+`Idempotency-Key`; los slots son futuros y alineados a 15 minutos.
 
 ```bash
-make fresh                 # deja libre el slot de ejemplo del seeder
-N=100 ./scripts/concurrency.sh
+make fresh
+make k6
 ```
 
-```text
-      1 201
-     99 409
+| Escenario | Requests | 201 | 409 | 5xx | p95 | p99 |
+|---|---:|---:|---:|---:|---:|---:|
+| `same-slot` | 100 | **1** | **99** | 0 | 1606 ms | 1655 ms |
+| `distinct-slots` | 100 | **100** | 0 | 0 | 1455 ms | 1514 ms |
+| `idempotent-retry` | 100 pares (200 req) | 100 pares con el mismo `id` | 0 mismatch | 0 | 67 ms | 73 ms |
 
-$ select status, count(*) from reservations where resource_id = '...' group by 1;
- held | 1
-```
+- **Mismo slot**: exactamente un ganador; el resto recibe el 409 de la restricción.
+- **Slots distintos**: 100/100, sin falsos conflictos.
+- **Misma clave concurrente**: mismo `id`; uno ejecuta y el otro es replay.
+- **0×5xx y 0 deadlocks** en las tres corridas.
 
-Durante la corrida no hay respuestas `500`: la serialización por recurso evita
-los ciclos de deadlocks y los reintentos de transacción quedan como red de
-seguridad. La prueba de carga formal (k6 con 100 VUs, p95 y throughput) es la
-fase 3 pendiente. No se publican números que no estén medidos.
+El p95 absoluto está dominado por el entorno (12 vCPU compartidos, 40 workers de
+FPM y k6 + app + PostgreSQL en la misma máquina): una lectura simple da 729 ms
+p95. Los conteos son deterministas; los tiempos varían ~±10% entre corridas. El
+detalle, la línea base y la interpretación están en
+[`docs/evidence/k6.md`](docs/evidence/k6.md).
+
+Verificación rápida sin k6: `make fresh && N=100 ./scripts/concurrency.sh`.
 
 ### 3. Planes de ejecución
 
@@ -270,7 +280,7 @@ Decisiones de arquitectura:
 - **`opening_hours` no se valida** todavía en el endpoint (la columna y el seed existen).
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
 - **Waitlist**: esquema listo (CHECKs, unicidad, FIFO) sin endpoints.
-- **k6 y frontend**: pendientes (fases 3 y 6).
+- **Frontend y waitlist**: pendientes (fases 5 y 6).
 
 ## Stack
 
@@ -278,6 +288,7 @@ Decisiones de arquitectura:
 - PostgreSQL **16** con `btree_gist`.
 - nginx + PHP-FPM (40 workers) en Docker Compose.
 - Blade para la landing (sin build), Blade + HTMX planificado para el frontend.
+- k6 (Docker) para la prueba de carga.
 - PHPUnit, Pint, GitHub Actions.
 
 ## Estructura
