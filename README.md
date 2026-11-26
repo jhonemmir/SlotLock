@@ -317,7 +317,7 @@ Decisiones de arquitectura:
 
 - **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist, pero no hay login ni ownership real.
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
-- **Deploy**: pendiente; el stack está listo para Docker/Fly (ver [`docs/deploy.md`](docs/deploy.md)).
+- **Deploy**: guía sin costo (Render + Neon) en [`docs/deploy.md`](docs/deploy.md); la imagen de producción está validada localmente.
 
 ## Stack
 

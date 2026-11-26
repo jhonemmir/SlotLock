@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: slotlock-demo
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile.prod
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: SlotLock
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: MAIL_MAILER
+        value: log
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: SIMULATE_MAX_N
+        value: "50"
+      # Valores que se completan en el dashboard al aplicar el blueprint:
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
