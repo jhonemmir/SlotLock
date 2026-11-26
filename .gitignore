@@ -23,4 +23,3 @@
 /vendor
 # SlotLock / Docker
 pgdata/
-/docs/explain/*.txt

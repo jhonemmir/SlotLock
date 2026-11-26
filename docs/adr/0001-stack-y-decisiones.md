@@ -10,7 +10,7 @@ Se necesita un sistema de reservas donde la garantía de "no hay solapamientos p
 
 ## Decisión 1 — Framework PHP: Laravel
 
-**Elegido:** Laravel 11+.
+**Elegido:** Laravel 13 sobre PHP 8.4.
 
 **Motivos:**
 - Ecosistema maduro (Eloquent, migraciones, queues, cache).
@@ -43,16 +43,25 @@ Se necesita un sistema de reservas donde la garantía de "no hay solapamientos p
 
 **Consecuencia:** la aplicación debe traducir el error `23P01` (exclusion_violation) a una respuesta HTTP 409 con mensaje claro.
 
-## Decisión 4 — Holds (reservas temporales): expiración lazy + índice parcial
+## Decisión 4 — Holds (reservas temporales): expiración oportunista + job
 
-**Elegido:** un hold es una fila en `reservations` con `status = 'held'` y `expires_at`. La "limpieza" es **lazy**: las consultas filtran `expires_at > now()` y un índice parcial cubre solo holds activos. Un job opcional hace limpieza física para métricas.
+**Elegido:** un hold es una fila en `reservations` con `status = 'held'` y `expires_at`.
+La expiración se resuelve **en la ruta de escritura**: antes del `INSERT`, la misma
+transacción marca `expired` los holds vencidos que solapan el slot. Un job cada
+minuto hace el barrido global como higiene/métricas.
 
 **Motivos:**
-- Un job activo de limpieza compite con las transacciones de reserva → complejidad y deadlocks.
-- La expiración lazy es determinista y no requiere coordinación.
-- El índice parcial mantiene el costo de las consultas de disponibilidad bajo.
+- PostgreSQL no permite `now()` en el predicado de un índice parcial, así que el
+  `EXCLUDE` no puede ignorar holds vencidos por sí solo.
+- Un job únicamente deja una ventana de hasta 60 s con el slot bloqueado y hace que
+  la corrección dependa del scheduler.
+- Codificar el vencimiento en el rango (`LEAST(end_at, expires_at)`) fue probado y
+  descartado: con un slot futuro y TTL corto el rango queda vacío y el hold no
+  bloquea nada.
 
-**Alternativa descartada:** job periódico que borra holds expirados (riesgo de carrera con confirmaciones).
+**Consecuencia:** un `UPDATE` extra acotado por recurso+rango en la ruta de reserva;
+el job de limpieza sigue existiendo pero no es crítico para la corrección. Detalle
+completo y alternativas en [ADR 0002](0002-expiracion-de-holds.md).
 
 ## Decisión 5 — Idempotencia: clave por operación
 
@@ -99,8 +108,9 @@ Se necesita un sistema de reservas donde la garantía de "no hay solapamientos p
 
 - El esquema es el artefacto más importante del proyecto; se versiona en `database/migrations/`.
 - Cada consulta crítica documenta su `EXPLAIN (ANALYZE, BUFFERS)` en `docs/explain/`.
-- La aplicación debe manejar errores de restricción (`23P01`, `23505`) de forma explícita.
-- El README final incluye SQL, planes y resultados k6.
+- La aplicación maneja errores de restricción (`23P01`, `23505`) de forma explícita.
+- Los tests corren contra PostgreSQL real: SQLite no puede validar la invariante.
+- El README incluye SQL, planes y resultados de la prueba de carga.
 
 ## Alternativas globales consideradas
 

@@ -27,7 +27,8 @@
 **Flujo:**
 - Confirmar un hold es `UPDATE reservations SET status='confirmed' WHERE id=? AND status='held' AND expires_at > now()`.
 - Si `expires_at <= now()`, el `UPDATE` afecta 0 filas → 410 Gone (hold expirado).
-- Si B inserta antes, la restricción `EXCLUDE` (que cuenta `held` activos) bloquea a B hasta que A confirme o expire. Si A confirma, B recibe 409. Si A expira (lazy), B puede insertar.
+- Si B inserta antes, la restricción `EXCLUDE` (que cuenta `held` activos) bloquea a B hasta que A confirme o expire. Si A confirma, B recibe 409. Si A expira (la nueva reserva lo marca `expired` o corre el job), B puede insertar.
+- Carrera confirmación vs limpieza: ambas son `UPDATE` sobre la misma fila; el row lock serializa. Si gana la limpieza, la confirmación afecta 0 filas → 410. Si gana la confirmación, la limpieza no matchea `status='held'`. Resultado determinista en ambos órdenes.
 
 **Resultado:** sin doble reserva; el slot queda para quien confirmó a tiempo.
 
@@ -47,24 +48,43 @@
 **Escenario:** el cliente reintenta `POST /reservations` porque no recibió respuesta (timeout de red), con la misma `Idempotency-Key`.
 
 **Flujo:**
-- Transacción: `INSERT INTO idempotency_keys ... ON CONFLICT (key) DO NOTHING` + verificar `request_hash`.
+- Transacción: `INSERT INTO idempotency_keys ... ON CONFLICT (key) DO NOTHING` + `SELECT ... FOR UPDATE` + verificar `request_hash`.
 - Si la clave ya existe y el hash coincide → devolver `response_body` cacheado con `response_status`, **sin re-ejecutar** la reserva.
 - Si la clave existe y el hash difiere → 409 `idempotency_conflict`.
+- Si dos requests concurrentes usan la misma clave, el `INSERT ... ON CONFLICT DO NOTHING` de la segunda espera a que la primera commitee (o rollbackee) y luego resuelve: replay si commiteó, ejecución propia si rollbackeó.
+- El hash incluye endpoint + usuario + payload canónico, así una clave no puede replayar la respuesta de otro endpoint.
 
 **Resultado:** un solo hold creado; el retry devuelve el mismo `id` y status.
 
-### C5 — Expiración lazy vs confirmación
+### C5 — Expiración de holds vs confirmación
 
 **Escenario:** un hold expira (`expires_at <= now()`) y otro usuario intenta reservar el slot.
 
-**Flujo:**
-- La expiración es lazy: no hay job que cambie `status` a `expired`. Las consultas filtran `status = 'confirmed' OR (status = 'held' AND expires_at > now())`.
-- El `EXCLUDE` cuenta `held` y `confirmed`, **incluyendo holds expirados** (porque el índice no evalúa `now()`).
-- ⚠️ **Riesgo:** un hold expirado sigue bloqueando el EXCLUDE hasta que se limpie físicamente o se cancele.
+**El problema estructural:** el `EXCLUDE` cuenta `held` y `confirmed` **incluyendo holds vencidos**, porque un índice no puede evaluar `now()`. PostgreSQL no acepta predicados volátiles en índices parciales, así que no existe un `WHERE ... OR expires_at > now()`.
 
-**Mitigación:** job de limpieza periódico (cada 1 min) que hace `UPDATE reservations SET status='expired' WHERE status='held' AND expires_at <= now()`. Como la promoción usa `SKIP LOCKED`, no bloquea confirmaciones. Alternativa: cambiar el `EXCLUDE` a un índice parcial `WHERE status = 'confirmed' OR (status='held' AND expires_at > now())` — pero PG no permite predicados volátiles (`now()`) en índices parciales. Por eso se mantiene el job de limpieza.
+**Estrategia implementada (ADR 0002):** limpieza oportunista en la ruta de escritura. Antes del `INSERT`, dentro de la misma transacción:
 
-**Decisión documentada:** holds expirados se marcan `expired` por job cada 60s; ventana de inconsistencia máxima = 60s, durante la cual el slot puede aparecer ocupado pero se libera al expirar. Aceptable para el dominio.
+```sql
+UPDATE reservations
+   SET status = 'expired', updated_at = now()
+ WHERE id IN (
+     SELECT id FROM reservations
+      WHERE resource_id = :resource
+        AND status = 'held'
+        AND expires_at <= now()
+        AND time_range && tstzrange(:start, :end, '[)')
+      ORDER BY id
+        FOR UPDATE
+ )
+```
+
+El `ORDER BY id` fija el orden de locks entre transacciones concurrentes. El `INSERT` siguiente ya no encuentra el hold en el índice. Un job cada minuto (`slotlock:expire-holds`) hace el barrido global como higiene/métricas, pero **la corrección ya no depende de él**.
+
+**Trampa descartada:** intentar `tstzrange(start_at, LEAST(end_at, expires_at))` produce un rango vacío cuando `expires_at < start_at`, que es el caso normal al reservar con anticipación (TTL de 10 min, slot de mañana). Un rango vacío no bloquea nada: dos usuarios podrían tomar el mismo slot futuro. El TTL no pertenece a la ventana del slot.
+
+**Carrera confirmación vs limpieza:** ambas son `UPDATE` sobre la misma fila; el row lock serializa. Si gana la limpieza, la confirmación afecta 0 filas → 410. Si gana la confirmación, la limpieza no matchea `status='held'`. Determinista en ambos órdenes.
+
+**Resultado:** el primer intento de reservar un slot con hold vencido lo toma; la ventana de "slot muerto" en escrituras es cero.
 
 ### C6 — Promoción de waitlist concurrente
 
@@ -86,51 +106,85 @@
 - Cada uno intenta `INSERT`. La restricción serializa.
 - Se mide: tiempo total, éxitos (esperado: 1), rechazos (49), errores inesperados (esperado: 0).
 
-**Resultado esperado en README:** tabla con N, éxitos, rechazos, p95 de latencia, throughput.
+**Resultado esperado en README:** tabla con N, éxitos, rechazos, p95 de latencia, throughput. **Pendiente (fase 3).**
+
+Cada VU debe enviar una `Idempotency-Key` **distinta**; si comparten clave, el test mide replays de idempotencia (N × 201) y no la exclusión. El escenario de retry es el único que reusa la clave.
+
+### C8 — Deadlocks y reintentos
+
+Con muchas inserciones simultáneas sobre el mismo slot, PostgreSQL puede
+detectar un deadlock (`40P01`) mientras verifica la restricción `EXCLUDE`: cada
+transacción espera por otra que, a su vez, espera por una tercera. Es un
+comportamiento conocido de las exclusion constraints bajo contención, no un bug
+de la aplicación.
+
+Reglas implementadas:
+
+- La transacción externa (la de idempotencia, que envuelve todo el request) se
+  reintenta hasta **5 veces** (`DB::transaction($fn, attempts: 5)`). En el
+  reintento, el ganador ya commiteó y el perdedor recibe `23P01` → `409`.
+- La limpieza de holds ordena por `id` antes de `FOR UPDATE`.
+- La promoción de waitlist usará `ORDER BY created_at, id` + `FOR UPDATE SKIP LOCKED` (fase 5).
+- No se reintenta `23P01`: es un resultado de dominio (409), no un fallo transitorio.
+
+**Medición:** 100 requests concurrentes al mismo slot → 1×201, 99×409, 0×500,
+con deadlocks transitorios absorbidos por los reintentos (ver `scripts/concurrency.sh`).
 
 ## Estrategia de locking resumida
 
 | Operación | Mecanismo |
 |---|---|
-| Crear reserva | `EXCLUDE` (índice GiST) serializa por recurso+rango |
+| Crear reserva | limpieza oportunista de holds vencidos + `EXCLUDE` (GiST) que serializa por recurso+rango |
 | Confirmar hold | `UPDATE ... WHERE status='held' AND expires_at > now()` (row lock implícito) |
 | Cancelar | `UPDATE ... WHERE id=?` (row lock) + índice EXCLUDE |
-| Promover waitlist | `SELECT ... FOR UPDATE SKIP LOCKED` |
-| Idempotencia | `INSERT ... ON CONFLICT (key)` (unique constraint) |
+| Expirar holds | `UPDATE ... WHERE status='held' AND expires_at<=now()` ordenado por `id` (`FOR UPDATE`) + job cada minuto |
+| Promover waitlist | `SELECT ... FOR UPDATE SKIP LOCKED` (fase 5) |
+| Idempotencia | `INSERT ... ON CONFLICT (key)` + `SELECT ... FOR UPDATE` |
 
 ## Niveles de aislamiento
 
 - Default: `READ COMMITTED`.
 - No se usa `SERIALIZABLE` (la restricción ya garantiza la invariante; SERIALIZABLE añadiría retries sin beneficio).
+- La conexión fija `SET TIME ZONE 'UTC'` (`DB_TIMEZONE`) para que los `timestampTz` se comparen siempre en la misma zona, independientemente del host.
 - Excepción: operaciones de waitlist usan row locks explícitos (`FOR UPDATE`).
 
 ## Índices
 
 ```sql
--- Disponibilidad por recurso y fecha
-CREATE INDEX idx_reservations_resource_start
+-- Disponibilidad por recurso + orden por fecha (btree)
+CREATE INDEX reservations_resource_id_start_at_index
   ON reservations (resource_id, start_at);
 
--- Holds activos (parcial)
-CREATE INDEX idx_reservations_held_active
-  ON reservations (resource_id, expires_at)
+-- Barrido global de holds vencidos (job de higiene)
+CREATE INDEX idx_reservations_held_expiry
+  ON reservations (expires_at)
   WHERE status = 'held';
 
+-- El índice GiST de reservations_no_overlap cubre `time_range && ...`
+-- (ver docs/explain/availability.md)
+
 -- Idempotencia (limpieza por TTL)
-CREATE INDEX idx_idempotency_expires
+CREATE INDEX idempotency_keys_expires_at_index
   ON idempotency_keys (expires_at);
 
--- Waitlist FIFO
-CREATE INDEX idx_waitlist_resource_created
-  ON waitlist_entries (resource_id, created_at)
+-- Waitlist FIFO determinista + unicidad de encolado
+CREATE INDEX idx_waitlist_fifo
+  ON waitlist_entries (resource_id, created_at, id)
+  WHERE status = 'waiting';
+
+CREATE UNIQUE INDEX idx_waitlist_unique_waiting
+  ON waitlist_entries (resource_id, user_id, desired_start, desired_end)
   WHERE status = 'waiting';
 ```
 
 ## Pruebas de concurrencia (checklist)
 
-- [ ] k6: 100 VUs, mismo slot → exactamente 1 éxito.
-- [ ] k6: 100 VUs, slots distintos → 100 éxitos, 0 conflictos.
-- [ ] k6: retry con misma idempotency key → mismo id.
-- [ ] Test: hold expirado no bloquea nueva reserva (después del job).
-- [ ] Test: cancelación libera slot para reserva concurrente.
-- [ ] Test: promoción de waitlist sin duplicados.
+- [ ] k6: 100 VUs, mismo slot → exactamente 1 éxito. *(fase 3)*
+- [ ] k6: 100 VUs, slots distintos → 100 éxitos, 0 conflictos. *(fase 3)*
+- [x] Test: el segundo insert solapado recibe `23P01` (sin pasar por el servicio).
+- [x] Test: hold expirado no bloquea la nueva reserva y queda en `expired`.
+- [x] Test: confirmar un hold vencido → 410.
+- [x] Test: cancelación libera el slot.
+- [x] Test: retry con la misma idempotency key → mismo `id`.
+- [x] Test: la misma key con payload distinto → 409.
+- [ ] Test: promoción de waitlist sin duplicados. *(fase 5)*
