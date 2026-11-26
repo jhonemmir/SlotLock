@@ -8,8 +8,8 @@
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Estado:** fases 0, 1, 1.5, 2, 3 y 4 implementadas (núcleo + API + holds + tests + CI + k6).
-Pendiente: waitlist (fase 5) y frontend (fase 6). Ver [`docs/plan.md`](docs/plan.md).
+**Estado:** fases 0, 1, 1.5, 2, 3, 4 y 6 implementadas (núcleo + API + holds + tests + CI + k6 + demo visual).
+Pendiente: waitlist (fase 5), GIF y deploy (fase 7). Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -40,8 +40,23 @@ Además del núcleo, el proyecto implementa:
 - **Disponibilidad** por día en la zona horaria del recurso.
 - **Tests contra PostgreSQL real** (nunca SQLite) y un test que verifica el SQLSTATE `23P01`.
 - **Prueba de carga con k6**: 100 requests concurrentes al mismo slot → 1×201 y 99×409.
+- **Demo visual** con Blade + HTMX: grilla, conflicto visible y simulación de N intentos.
 - **CI** con PostgreSQL 16, migraciones, aserción de la restricción y Pint.
 - **Entorno reproducible**: la app entera corre en Docker (PHP-FPM + nginx + scheduler).
+
+## Demo
+
+![Demo de SlotLock](docs/screenshots/demo.png)
+
+Con el stack levantado: <http://localhost:8000/demo>
+
+- Grilla de disponibilidad por recurso y día (slots de 15 min).
+- Reserva de un hold; si el slot ya está tomado, el `409` se ve en pantalla.
+- Simulación de N requests concurrentes: 1 creada, N-1 rechazadas, con los tiempos.
+
+La simulación server-side usa `Http::pool` contra la API real (una
+`Idempotency-Key` distinta por intento). En Docker el `SIMULATE_BASE_URL` es
+`http://nginx`; en local se usa `APP_URL`.
 
 ## Inicio rápido
 
@@ -55,13 +70,14 @@ Eso levanta PostgreSQL, PHP-FPM, nginx y el scheduler; instala dependencias, gen
 la clave, corre las migraciones y siembra 3 recursos.
 
 - App: <http://localhost:8000>
+- Demo: <http://localhost:8000/demo>
 - Salud: <http://localhost:8000/health>
 - Recursos: <http://localhost:8000/api/resources>
 
 Otros comandos:
 
 ```bash
-make test     # 20 tests contra PostgreSQL (crea slotlock_test si falta)
+make test     # 27 tests contra PostgreSQL (crea slotlock_test si falta)
 make k6       # same-slot + distinct-slots + idempotent-retry
 make fresh    # migrate:fresh + seed (borra los datos de demo)
 make psql     # sesión psql sobre la DB de desarrollo
@@ -85,6 +101,7 @@ make logs
 | `POST` | `/api/reservations` | Crea un hold. Requiere `Idempotency-Key` |
 | `POST` | `/api/reservations/{id}/confirm` | Confirma un hold dentro del TTL |
 | `DELETE` | `/api/reservations/{id}` | Cancela un hold o una reserva confirmada |
+| `POST` | `/api/simulate/reservations` | Simula N intentos concurrentes (máx. 50, rate-limited) |
 | `GET` | `/health` | Estado de la app + `SELECT 1` a la DB |
 
 ```bash
@@ -195,7 +212,7 @@ corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 
 ### 1. Tests
 
-`make test` → **20 tests, 58 assertions**, contra PostgreSQL 16 real:
+`make test` → **27 tests, 84 assertions**, contra PostgreSQL 16 real:
 
 - El insert solapado recibe `23P01` **sin pasar por el servicio** (la restricción es la fuente de verdad).
 - Un hold vencido no bloquea y queda en `expired`.
@@ -280,14 +297,14 @@ Decisiones de arquitectura:
 - **`opening_hours` no se valida** todavía en el endpoint (la columna y el seed existen).
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
 - **Waitlist**: esquema listo (CHECKs, unicidad, FIFO) sin endpoints.
-- **Frontend y waitlist**: pendientes (fases 5 y 6).
+- **GIF y deploy**: pendientes (fase 7).
 
 ## Stack
 
 - PHP **8.4** + Laravel **13** (el lock exige ≥ 8.4.1 por Symfony 8; el README anterior decía 8.3 y era incorrecto).
 - PostgreSQL **16** con `btree_gist`.
 - nginx + PHP-FPM (40 workers) en Docker Compose.
-- Blade para la landing (sin build), Blade + HTMX planificado para el frontend.
+- Blade + HTMX 2.0.8 (vendorizado, sin build) para la demo.
 - k6 (Docker) para la prueba de carga.
 - PHPUnit, Pint, GitHub Actions.
 
@@ -298,12 +315,15 @@ app/
 ├── Console/Commands/      # slotlock:expire-holds, slotlock:prune-idempotency
 ├── Enums/                 # ReservationStatus
 ├── Exceptions/            # errores de dominio con traducción HTTP
-├── Http/                  # controladores, requests y resources de la API
+├── Http/                  # controladores de API y demo, requests y resources
 ├── Models/                # Resource, Reservation
-└── Services/              # reserva, idempotencia, expiración, disponibilidad
+└── Services/              # reserva, idempotencia, expiración, disponibilidad, simulación
 database/migrations/       # esquema + EXCLUDE + CHECKs + índices
 docker/                    # php-fpm, nginx, init de Postgres
-docs/                      # plan, ADRs, specs y EXPLAIN
+docs/                      # plan, ADRs, specs, EXPLAIN, evidencia k6 y capturas
+k6/                        # same-slot, distinct-slots, idempotent-retry
+public/                    # css/js de la demo + htmx vendorizado
+resources/views/demo/      # grilla, reserva y simulación (HTMX)
 scripts/                   # hold.sh y concurrency.sh (verificación manual)
 tests/Feature/             # la suite contra PostgreSQL real
 ```

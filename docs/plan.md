@@ -33,7 +33,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] CI: PostgreSQL 16 + migraciones + aserción de la restricción + Pint.
 - [x] App dockerizada con PHP-FPM (40 workers) para concurrencia real.
 - [x] README, ADR y specs sincronizados con el código.
-- **Entregable:** `make test` (20 tests) verde en local y en CI.
+- **Entregable:** `make test` (27 tests) verde en local y en CI.
 
 ## Fase 2 — API de reservas (núcleo) ✅
 
@@ -75,20 +75,24 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [ ] Notificación (log o email fake) al promovido.
 - **Entregable:** flujo cancelación → promoción verificado.
 
-## Fase 6 — Frontend mínimo (Blade + HTMX) ⏳
+## Fase 6 — Frontend mínimo (Blade + HTMX) ✅
 
-- [x] Landing estática (sin build) con la invariante y ejemplos curl.
-- [ ] Pantalla 1: cuadrícula de disponibilidad por día.
-- [ ] Pantalla 2: formulario de reserva con conflicto visible (409).
-- [ ] Pantalla 3: simulación ("intentar 50 reservas simultáneas" → resultados).
-- [ ] `POST /api/simulate/reservations` (server-side, concurrente).
-- **Entregable:** demo visual en 10 segundos + GIF.
+- [x] Landing estática (sin build) con la invariante, CTA a la demo y ejemplos curl.
+- [x] Pantalla 1: cuadrícula de disponibilidad por día (HTMX, resource/date).
+- [x] Pantalla 2: formulario de reserva con conflicto visible (409) y refresh OOB de la grilla.
+- [x] Pantalla 3: simulación ("intentar N reservas simultáneas" → resultados + barras).
+- [x] `POST /api/simulate/reservations` (server-side con `Http::pool`, rate-limited).
+- [x] Captura real en `docs/screenshots/demo.png`.
+- [ ] GIF/asciinema de 30 s (fase 7).
+- **Entregable:** demo visual en `/demo`. ✅
 
 ## Fase 7 — Pulido y documentación final ⏳
 
 - [x] README con quickstart, API, decisiones y evidencia parcial.
 - [x] README con resultados k6.
-- [ ] Demo desplegada o asciinema.
+- [x] Captura real de la demo en el README.
+- [ ] GIF/asciinema de la simulación (30 s).
+- [ ] Demo desplegada.
 - [ ] (Opcional) programa en C/Go para latencia p99.
 - **Entregable:** proyecto listo para portafolio.
 

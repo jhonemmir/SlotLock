@@ -169,7 +169,7 @@ transacción de la nueva reserva + job de higiene cada minuto. Ver
 | POST | `/api/reservations/{id}/confirm` | ✅ implementado |
 | DELETE | `/api/reservations/{id}` | ✅ implementado |
 | POST | `/api/waitlist` | ⬜ fase 5 |
-| POST | `/api/simulate/reservations` | ⬜ fase 6 |
+| POST | `/api/simulate/reservations` | ✅ implementado (fase 6, máx. 50) |
 | GET | `/health` | ✅ implementado (incluye `SELECT 1`) |
 
-El endpoint `/simulate/reservations` recibirá `{ resource_id, slot, n }` y lanzará N intentos concurrentes server-side, devolviendo `{ succeeded: 1, rejected: n-1, errors: [...] }`. Es la base de la tercera pantalla.
+El endpoint `/api/simulate/reservations` recibe `{ resource_id, start_at, end_at, n }` y lanza N intentos concurrentes server-side con `Http::pool`, devolviendo `{ n, succeeded, rejected, errors, duration_ms }`. Cada intento usa una `Idempotency-Key` distinta. Es la base de la tercera pantalla de la demo.

@@ -56,6 +56,16 @@
         ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
         footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         code { background: rgba(148, 166, 196, .12); padding: 2px 6px; border-radius: 5px; font-family: ui-monospace, Menlo, monospace; font-size: .85em; }
+        .cta {
+            display: inline-block;
+            margin-top: 24px;
+            background: var(--accent);
+            color: #04201c;
+            font-weight: 700;
+            padding: 11px 20px;
+            border-radius: 10px;
+        }
+        .cta:hover { color: #04201c; filter: brightness(1.08); }
     </style>
 </head>
 <body>
@@ -63,6 +73,7 @@
         <header>
             <div class="brand">Slot<span>Lock</span></div>
             <nav>
+                <a href="/demo">Demo</a>
                 <a href="/api/resources">API</a>
                 <a href="/health">Health</a>
                 <a href="https://github.com/jhonemmir/SlotLock" rel="noreferrer">GitHub</a>
@@ -77,6 +88,7 @@
                 Uno gana; el otro recibe un 409 determinista. La garantía no está en PHP:
                 está en una restricción de exclusión de PostgreSQL.
             </p>
+            <a class="cta" href="/demo">Probar la demo →</a>
         </section>
 
         <div class="grid">
