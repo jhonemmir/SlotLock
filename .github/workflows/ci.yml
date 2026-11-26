@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: slotlock_test
+          POSTGRES_USER: slotlock
+          POSTGRES_PASSWORD: slotlock
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U slotlock -d slotlock_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: slotlock_test
+      DB_USERNAME: slotlock
+      DB_PASSWORD: slotlock
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pcntl
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Migrate
+        run: php artisan migrate --force
+
+      - name: Verify the exclusion constraint exists
+        run: |
+          psql "postgresql://slotlock:slotlock@127.0.0.1:5432/slotlock_test" -tAc \
+            "SELECT conname FROM pg_constraint WHERE conname = 'reservations_no_overlap'" \
+            | grep -qx reservations_no_overlap
+
+      - name: Tests
+        run: php artisan test
+
+      - name: Code style
+        run: ./vendor/bin/pint --test
