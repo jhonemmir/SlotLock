@@ -35,15 +35,11 @@ final class ReservationService
         $this->assertValidWindow($resource, $startUtc, $endUtc);
 
         return DB::transaction(function () use ($resource, $startUtc, $endUtc, $user) {
-            // Serializa los intentos sobre el mismo recurso. La garantía
-            // sigue siendo el EXCLUDE; esto solo evita el ciclo de deadlocks
-            // de la restricción cuando N transacciones insertan a la vez
-            // (ver C8 en docs/spec/concurrencia.md). Se libera al terminar
-            // la transacción de nivel superior.
-            DB::select(
-                'select pg_advisory_xact_lock(hashtextextended(?::text, 0))',
-                [$resource->getKey()],
-            );
+            // Serializa los intentos que podrían solaparse. El lock es por
+            // recurso + día (en la zona del recurso), no por recurso global:
+            // dos reservas en días distintos no se bloquean entre sí.
+            // La garantía sigue siendo el EXCLUDE (ver C8).
+            $this->lockResourceDays($resource, $startUtc, $endUtc);
 
             // Un hold vencido no libera el índice por sí solo (ADR 0002).
             $this->expiry->forSlot($resource, $startUtc, $endUtc);
@@ -109,6 +105,36 @@ final class ReservationService
         }
 
         return $reservation->refresh();
+    }
+
+    /**
+     * Advisory locks por recurso + día local. Si la reserva cruza medianoche,
+     * se toman los dos días en orden lexicográfico para evitar deadlocks.
+     * PostgreSQL no tiene advisory locks por UUID: hashtextextended convierte
+     * la clave (uuid:día) en un bigint estable.
+     */
+    private function lockResourceDays(
+        Resource $resource,
+        CarbonImmutable $start,
+        CarbonImmutable $end,
+    ): void {
+        $localStart = $start->setTimezone($resource->timezone);
+        $localEnd = $end->setTimezone($resource->timezone);
+
+        $days = [$localStart->toDateString()];
+
+        if ($localEnd->toDateString() !== $localStart->toDateString()) {
+            $days[] = $localEnd->toDateString();
+        }
+
+        sort($days);
+
+        foreach ($days as $day) {
+            DB::select(
+                'select pg_advisory_xact_lock(hashtextextended(?::text, 0))',
+                [$resource->getKey().':'.$day],
+            );
+        }
     }
 
     private function assertValidWindow(

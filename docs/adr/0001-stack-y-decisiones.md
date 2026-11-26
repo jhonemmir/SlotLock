@@ -82,7 +82,7 @@ completo y alternativas en [ADR 0002](0002-expiracion-de-holds.md).
 - `SERIALIZABLE` añade overhead y retries por serialization failure; la restricción ya garantiza la invariante.
 - `READ COMMITTED` + restricción única es suficiente y más simple de razonar.
 
-**Excepción:** la promoción de waitlist usa `SELECT ... FOR UPDATE SKIP LOCKED` para evitar bloqueos, y la creación de reservas toma un advisory lock por recurso para ordenar inserciones concurrentes (ver C8).
+**Excepción:** la promoción de waitlist usa `SELECT ... FOR UPDATE SKIP LOCKED` para evitar bloqueos, y la creación de reservas toma un advisory lock por recurso + día para ordenar inserciones concurrentes (ver C8).
 
 ## Decisión 7 — Prueba de carga: k6 como evidencia principal
 

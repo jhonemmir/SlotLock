@@ -120,15 +120,20 @@ volver a entrar en el ciclo (livelock) bajo contención alta.
 
 Reglas implementadas:
 
-- **Serialización por recurso**: antes de la limpieza y del `INSERT`, la
-  transacción toma `pg_advisory_xact_lock(hashtextextended(resource_id, 0))`.
-  PostgreSQL no tiene un advisory lock por UUID nativo: `hashtextextended`
-  convierte el UUID en un `bigint` estable de 64 bits, que es la clave que
-  espera `pg_advisory_xact_lock`. Los intentos del mismo recurso se ordenan; el
-  primero inserta y los demás reciben `23P01` → `409`. Recursos distintos siguen
-  en paralelo. Se libera al terminar la transacción de nivel superior. Una
-  colisión de hash solo haría que dos recursos se serialicen entre sí; no afecta
-  la corrección.
+- **Serialización por recurso + día**: antes de la limpieza y del `INSERT`, la
+  transacción toma `pg_advisory_xact_lock(hashtextextended(resource_id || ':' || día, 0))`.
+  PostgreSQL no tiene un advisory lock por UUID ni por texto nativo:
+  `hashtextextended` convierte la clave en un `bigint` estable de 64 bits, que es
+  lo que espera `pg_advisory_xact_lock`. Se usa el **día local del recurso** para
+  que reservas de días distintos no se bloqueen entre sí; si una reserva cruza
+  medianoche, se toman los dos días en orden lexicográfico. Los intentos del
+  mismo recurso y día se ordenan; el primero inserta y los demás reciben `23P01`
+  → `409`. Días distintos siguen en paralelo. Se libera al terminar la
+  transacción de nivel superior. Una colisión de hash solo haría que dos claves
+  se serialicen entre sí; no afecta la corrección. Dentro de un mismo día, dos
+  reservas no solapadas también se serializan: es un trade-off consciente (un
+  booking dura milisegundos) para evitar el livelock; si hiciera falta, se puede
+  afinar a buckets más finos.
 - **Reintentos como red de seguridad**: la transacción externa (idempotencia)
   se reintenta hasta 5 veces para cruces menos frecuentes (confirmación vs.
   inserción, por ejemplo). No se reintenta `23P01`: es un resultado de dominio.
@@ -146,7 +151,7 @@ solapamiento (el test de `23P01` lo verifica).
 
 | Operación | Mecanismo |
 |---|---|
-| Crear reserva | advisory lock por recurso + limpieza oportunista de holds vencidos + `EXCLUDE` (GiST) que serializa por recurso+rango |
+| Crear reserva | advisory lock por recurso + día + limpieza oportunista de holds vencidos + `EXCLUDE` (GiST) que serializa por recurso+rango |
 | Confirmar hold | `UPDATE ... WHERE status='held' AND expires_at > now()` (row lock implícito) |
 | Cancelar | `UPDATE ... WHERE id=?` (row lock) + índice EXCLUDE |
 | Expirar holds | `UPDATE ... WHERE status='held' AND expires_at<=now()` ordenado por `id` (`FOR UPDATE`) + job cada minuto |
