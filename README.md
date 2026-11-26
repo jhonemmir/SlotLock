@@ -8,8 +8,8 @@
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Estado:** fases 0, 1, 1.5, 2, 3, 4 y 6 implementadas (núcleo + API + holds + tests + CI + k6 + demo visual).
-Pendiente: waitlist (fase 5), GIF y deploy (fase 7). Ver [`docs/plan.md`](docs/plan.md).
+**Estado:** fases 0, 1, 1.5, 2, 3, 4, 5 y 6 implementadas (núcleo + API + holds + waitlist + tests + CI + k6 + demo).
+Pendiente: GIF y deploy (fase 7). Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -40,6 +40,7 @@ Además del núcleo, el proyecto implementa:
 - **Disponibilidad** por día en la zona horaria del recurso.
 - **Tests contra PostgreSQL real** (nunca SQLite) y un test que verifica el SQLSTATE `23P01`.
 - **Prueba de carga con k6**: 100 requests concurrentes al mismo slot → 1×201 y 99×409.
+- **Waitlist** con promoción FIFO automática (`SKIP LOCKED`), hold corto y notificación.
 - **Demo visual** con Blade + HTMX: grilla, conflicto visible y simulación de N intentos.
 - **CI** con PostgreSQL 16, migraciones, aserción de la restricción y Pint.
 - **Entorno reproducible**: la app entera corre en Docker (PHP-FPM + nginx + scheduler).
@@ -77,7 +78,7 @@ la clave, corre las migraciones y siembra 3 recursos.
 Otros comandos:
 
 ```bash
-make test     # 27 tests contra PostgreSQL (crea slotlock_test si falta)
+make test     # 35 tests contra PostgreSQL (crea slotlock_test si falta)
 make k6       # same-slot + distinct-slots + idempotent-retry
 make fresh    # migrate:fresh + seed (borra los datos de demo)
 make psql     # sesión psql sobre la DB de desarrollo
@@ -101,6 +102,7 @@ make logs
 | `POST` | `/api/reservations` | Crea un hold. Requiere `Idempotency-Key` |
 | `POST` | `/api/reservations/{id}/confirm` | Confirma un hold dentro del TTL |
 | `DELETE` | `/api/reservations/{id}` | Cancela un hold o una reserva confirmada |
+| `POST` | `/api/waitlist` | Registra interés en un slot ocupado |
 | `POST` | `/api/simulate/reservations` | Simula N intentos concurrentes (máx. 50, rate-limited) |
 | `GET` | `/health` | Estado de la app + `SELECT 1` a la DB |
 
@@ -201,6 +203,22 @@ sigue impidiendo el solapamiento (el test de `23P01` lo prueba); solo empeora la
 latencia bajo contención extrema. Es una decisión de throughput, no de
 corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 
+### Lista de espera
+
+- `POST /api/waitlist` registra interés en un slot **ocupado**. Si está libre,
+  responde `409 slot_is_free`. Una sola entrada `waiting` por usuario y rango
+  (`409 waitlist_duplicate`).
+- Al cancelar una reserva, se dispara `ReservationCancelled` y un listener busca
+  la primera entrada FIFO compatible (`ORDER BY created_at, id`) con
+  `FOR UPDATE SKIP LOCKED`.
+- Solo promueve si **todo** el rango deseado quedó libre (puede pedir más horas
+  que el slot liberado); le otorga un hold de **5 minutos** y guarda
+  `promoted_reservation_id`.
+- La notificación se envía después del commit (mailer `log` + `Log::info`); un
+  fallo de mail no revierte la promoción.
+- **v1 sin auth:** el `user_id` viaja en el body. El seeder crea
+  `demo@slotlock.local` (`00000000-0000-4000-8000-000000000101`) para los ejemplos.
+
 ### Zona horaria y granularidad
 
 - Todo se almacena en UTC; la conexión fija `SET TIME ZONE 'UTC'` (`DB_TIMEZONE`).
@@ -212,7 +230,7 @@ corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 
 ### 1. Tests
 
-`make test` → **27 tests, 84 assertions**, contra PostgreSQL 16 real:
+`make test` → **35 tests, 137 assertions**, contra PostgreSQL 16 real:
 
 - El insert solapado recibe `23P01` **sin pasar por el servicio** (la restricción es la fuente de verdad).
 - Un hold vencido no bloquea y queda en `expired`.
@@ -220,6 +238,7 @@ corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 - Cancelar libera el slot; cancelar dos veces → `409`.
 - Retry con la misma clave → mismo `id`; payload distinto → `409`; clave vencida → se reutiliza.
 - Disponibilidad marca `confirmed` y trata los holds vencidos como libres.
+- Waitlist: FIFO, rango completo libre, dos cancelaciones → dos usuarios, sin duplicados, TTL corto y mail.
 
 La suite usa `DatabaseTruncation` en lugar de `RefreshDatabase`: el test que
 provoca `23P01` no queda dentro de una transacción abortada, y la conexión se
@@ -293,10 +312,9 @@ Decisiones de arquitectura:
 
 ## Limitaciones conocidas (v1)
 
-- **Sin autenticación**: `user_id` es opcional y no se aplica "solo el dueño cancela". Es una demo abierta.
+- **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist, pero no hay login ni ownership real.
 - **`opening_hours` no se valida** todavía en el endpoint (la columna y el seed existen).
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
-- **Waitlist**: esquema listo (CHECKs, unicidad, FIFO) sin endpoints.
 - **GIF y deploy**: pendientes (fase 7).
 
 ## Stack
@@ -313,11 +331,13 @@ Decisiones de arquitectura:
 ```
 app/
 ├── Console/Commands/      # slotlock:expire-holds, slotlock:prune-idempotency
-├── Enums/                 # ReservationStatus
+├── Enums/                 # ReservationStatus, WaitlistStatus
+├── Events/Listeners/      # ReservationCancelled → promoción de waitlist
 ├── Exceptions/            # errores de dominio con traducción HTTP
 ├── Http/                  # controladores de API y demo, requests y resources
-├── Models/                # Resource, Reservation
-└── Services/              # reserva, idempotencia, expiración, disponibilidad, simulación
+├── Mail/                  # WaitlistPromoted (mailer log en dev)
+├── Models/                # Resource, Reservation, WaitlistEntry
+└── Services/              # reserva, idempotencia, expiración, disponibilidad, waitlist, simulación
 database/migrations/       # esquema + EXCLUDE + CHECKs + índices
 docker/                    # php-fpm, nginx, init de Postgres
 docs/                      # plan, ADRs, specs, EXPLAIN, evidencia k6 y capturas

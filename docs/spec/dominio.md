@@ -57,11 +57,13 @@ Esto garantiza que dos reservas `held` o `confirmed` del mismo recurso con rango
 | `user_id` | uuid FK | |
 | `desired_start`, `desired_end` | timestamptz(6) | `CHECK (desired_start < desired_end)` |
 | `status` | varchar(20) | `waiting`, `notified`, `expired` (`CHECK`) |
-| `created_at` | timestamptz(6) | FIFO por `(created_at, id)` |
+| `promoted_reservation_id` | uuid FK → reservations | hold otorgado al promover; nullable |
+| `created_at` | timestamptz(6) | FIFO por `(created_at, id)`; microsegundos para desempatar |
 
 Una sola entrada `waiting` por usuario y rango (índice único parcial). La
-promoción usa `ORDER BY created_at, id` para que el orden sea determinista ante
-empates de timestamp.
+promoción usa `ORDER BY created_at, id` para que el orden sea determinista; el
+modelo guarda `created_at` con microsegundos para que dos altas en el mismo
+segundo no dependan del UUID.
 
 ### IdempotencyKey
 
@@ -143,14 +145,21 @@ transacción de la nueva reserva + job de higiene cada minuto. Ver
 
 - `DELETE /reservations/{id}` (sin idempotencia en v1).
 - **Limitación v1:** no hay autenticación; la regla "solo el dueño o un admin" queda documentada pero no aplicada.
-- Cancelar una reserva `confirmed` libera el slot y (opcional, fase posterior) notifica al primero de la waitlist.
+- Cancelar una reserva `confirmed` libera el slot y dispara la promoción de la waitlist (ver "Lista de espera").
 - Cancelar un `held` lo marca `cancelled` (no `expired`), para distinguir "usuario canceló" de "se le venció".
 
 ## Lista de espera
 
-- `POST /waitlist` registra interés en un slot ocupado.
-- Promoción: cuando se cancela una reserva, el primer waitlist entry compatible (mismo recurso, solapamiento de rango) se marca `notified` y se le otorga un hold con TTL corto (p.ej. 5 min).
-- Concurrencia: la promoción usa `SELECT ... FOR UPDATE SKIP LOCKED` sobre waitlist entries para no bloquear ni duplicar.
+- `POST /api/waitlist` registra interés en un slot **ocupado** (hold activo o confirmado). Si el slot está libre, responde `409 slot_is_free`: conviene reservarlo directamente.
+- **v1 sin auth:** el cliente envía `user_id` explícitamente (en producción saldría del usuario autenticado).
+- Una sola entrada `waiting` por usuario + recurso + rango (índice único parcial). Repetirla da `409 waitlist_duplicate`.
+- Promoción: al cancelar una reserva, un listener síncrono busca la primera entrada compatible en FIFO (`ORDER BY created_at, id`) con `FOR UPDATE SKIP LOCKED`.
+- **Compatible** significa que el rango deseado solapa el slot cancelado **y** que el rango completo está libre; una entrada puede pedir más horas que el slot que se liberó y esperar a que se libere todo.
+- Al promover, se le otorga un hold con TTL corto (`WAITLIST_HOLD_TTL_MINUTES`, default 5) y se guarda `promoted_reservation_id`. La entrada pasa a `notified`.
+- Notificación: email (`Mail::to(...)`, mailer `log` por defecto) + `Log::info`. Se envía después del commit; un fallo de mail no revierte la promoción.
+- Concurrencia: `SKIP LOCKED` evita que dos cancelaciones promuevan la misma entrada; la segunda toma la siguiente o ninguna. `C6` en la spec de concurrencia.
+
+Si la promoción no puede crear el hold (otra transacción tomó el slot entre el chequeo y el insert), la entrada queda `waiting` y se reintenta en la próxima cancelación.
 
 ## Disponibilidad
 
@@ -168,7 +177,7 @@ transacción de la nueva reserva + job de higiene cada minuto. Ver
 | POST | `/api/reservations` | ✅ implementado (idempotente) |
 | POST | `/api/reservations/{id}/confirm` | ✅ implementado |
 | DELETE | `/api/reservations/{id}` | ✅ implementado |
-| POST | `/api/waitlist` | ⬜ fase 5 |
+| POST | `/api/waitlist` | ✅ implementado (fase 5) |
 | POST | `/api/simulate/reservations` | ✅ implementado (fase 6, máx. 50) |
 | GET | `/health` | ✅ implementado (incluye `SELECT 1`) |
 

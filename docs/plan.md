@@ -33,7 +33,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] CI: PostgreSQL 16 + migraciones + aserción de la restricción + Pint.
 - [x] App dockerizada con PHP-FPM (40 workers) para concurrencia real.
 - [x] README, ADR y specs sincronizados con el código.
-- **Entregable:** `make test` (27 tests) verde en local y en CI.
+- **Entregable:** `make test` (35 tests) verde en local y en CI.
 
 ## Fase 2 — API de reservas (núcleo) ✅
 
@@ -67,13 +67,15 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] Tests: hold expirado libera el slot; confirmación tardía → 410.
 - **Entregable:** reservas temporales funcionales y seguras. ✅
 
-## Fase 5 — Cancelaciones + waitlist ⏳
+## Fase 5 — Cancelaciones + waitlist ✅
 
 - [x] Cancelación transaccional (libera el slot).
-- [ ] `POST /api/waitlist` (el esquema ya está listo: CHECKs + unicidad + FIFO).
-- [ ] Promoción con `FOR UPDATE SKIP LOCKED`.
-- [ ] Notificación (log o email fake) al promovido.
-- **Entregable:** flujo cancelación → promoción verificado.
+- [x] `POST /api/waitlist` (el esquema ya estaba listo: CHECKs + unicidad + FIFO).
+- [x] Promoción con `FOR UPDATE SKIP LOCKED` + chequeo de rango completo libre.
+- [x] Hold corto (5 min) con `promoted_reservation_id` en la entrada.
+- [x] Notificación (mail fake/log) al promovido, después del commit.
+- [x] Tests: FIFO, dos cancelaciones → dos usuarios, no duplicación, mail y TTL.
+- **Entregable:** flujo cancelación → promoción verificado. ✅
 
 ## Fase 6 — Frontend mínimo (Blade + HTMX) ✅
 
@@ -112,12 +114,12 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 | 4 | Estados de reserva | `held`, `confirmed`, `cancelled`, `expired` (`CHECK`) |
 | 5 | Idempotency-Key | **Obligatoria** (400 si falta o no es UUID) |
 | 6 | Expiración de holds | Oportunista en escritura + job de higiene (ADR 0002) |
-| 7 | Promoción de waitlist | Automática en v1 (pendiente) con `SKIP LOCKED` |
+| 7 | Promoción de waitlist | Automática con FIFO + `SKIP LOCKED` + rango completo libre + hold de 5 min |
 | 8 | Zona horaria | Almacenamiento UTC; sesión de DB fijada en UTC |
 
 | Riesgo | Mitigación |
 |---|---|
-| Scope creep en waitlist | Se entrega después de k6; el esquema ya está preparado |
+| Scope creep en waitlist | Se entregó acotada a un solo listener + tests; sin UI extra |
 | Job de limpieza compitiendo | La corrección no depende del job (ADR 0002); `ORDER BY id FOR UPDATE` |
 | k6 no disponible en CI | Se ejecuta localmente/Docker; CI valida la restricción y los tests |
 | Frontend consume tiempo | HTMX mínimo, sin SPA; landing estática ya lista |
@@ -125,9 +127,8 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 
 ## Orden de entrega recomendado para el portafolio
 
-1. **k6 + tabla de resultados** (fase 3): es la evidencia que falta.
-2. Frontend de simulación + GIF (fase 6): el "wow" visual.
-3. Waitlist (fase 5): documentada como "diseñada, no implementada" si el tiempo se acorta.
-4. Programa en C/Go (opcional).
+1. **GIF/asciinema + deploy** (fase 7): lo que falta para publicar.
+2. Validación de `opening_hours` y auth/ownership (pulido).
+3. Programa en C/Go (opcional).
 
 **Nunca cortar:** la restricción, los tests contra PostgreSQL y los planes de ejecución. Son el corazón del proyecto.

@@ -90,12 +90,18 @@ El `ORDER BY id` fija el orden de locks entre transacciones concurrentes. El `IN
 
 **Escenario:** dos cancelaciones simultáneas promueven entradas de la waitlist para el mismo recurso.
 
-**Flujo:**
-- Al cancelar, buscar el primer waitlist entry compatible: `SELECT ... FROM waitlist_entries WHERE resource_id=? AND status='waiting' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`.
-- `SKIP LOCKED` evita que la segunda transacción espere a la primera; toma el siguiente o ninguno.
-- La promoción crea un hold con TTL corto para el usuario notificado.
+**Flujo implementado:**
+- Al cancelar, `ReservationCancelled` dispara un listener síncrono.
+- El listener busca la primera entrada `waiting` cuyo rango solape el slot cancelado:
+  `WHERE resource_id = ? AND status = 'waiting' AND rango && slot ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1`.
+- `SKIP LOCKED` evita esperar por la entrada que otra cancelación ya está promoviendo; la segunda toma la siguiente o ninguna.
+- Antes de crear el hold se verifica que **todo** el rango deseado quedó libre (puede ser más amplio que el slot cancelado). Si no, la entrada sigue `waiting`.
+- Se crea un hold con TTL corto (5 min) y se guarda `promoted_reservation_id`; la entrada pasa a `notified`.
+- La notificación (mail + log) se envía después del commit; un fallo de mail no revierte la promoción.
 
-**Resultado:** cada cancelación promueve a un usuario distinto (o a ninguno si no hay waitlist). Sin deadlocks.
+**Resultado:** cada cancelación promueve a un usuario distinto (o a ninguno si no hay una entrada compatible). Sin deadlocks ni dobles promociones. Si el hold falla por una carrera, la entrada queda `waiting`.
+
+**Tests:** `tests/Feature/WaitlistTest.php` cubre FIFO, rango completo libre, dos cancelaciones → dos usuarios distintos, no duplicación, TTL corto y mail.
 
 ### C7 — Simulación: 50 reservas simultáneas
 
@@ -196,8 +202,8 @@ CREATE UNIQUE INDEX idx_waitlist_unique_waiting
 
 ## Pruebas de concurrencia (checklist)
 
-- [ ] k6: 100 VUs, mismo slot → exactamente 1 éxito. *(fase 3)*
-- [ ] k6: 100 VUs, slots distintos → 100 éxitos, 0 conflictos. *(fase 3)*
+- [x] k6: 100 VUs, mismo slot → exactamente 1 éxito.
+- [x] k6: 100 VUs, slots distintos → 100 éxitos, 0 conflictos.
 - [x] Test: el segundo insert solapado recibe `23P01` (sin pasar por el servicio).
 - [x] Test: hold expirado no bloquea la nueva reserva y queda en `expired`.
 - [x] Test: confirmar un hold vencido → 410.
@@ -206,4 +212,5 @@ CREATE UNIQUE INDEX idx_waitlist_unique_waiting
 - [x] Test: la misma key con payload distinto → 409.
 - [x] Test: clave de idempotencia vencida → se reutiliza (no 409).
 - [x] Test: cancelar dos veces → 409 y confirmar vencido por HTTP → 410.
-- [ ] Test: promoción de waitlist sin duplicados. *(fase 5)*
+- [x] Test: promoción de waitlist sin duplicados.
+- [x] Test: dos cancelaciones promueven usuarios distintos; rango completo libre; TTL corto y mail.

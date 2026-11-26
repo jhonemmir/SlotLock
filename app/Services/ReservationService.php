@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Enums\ReservationStatus;
+use App\Events\ReservationCancelled;
 use App\Exceptions\HoldExpired;
-use App\Exceptions\InvalidReservationWindow;
 use App\Exceptions\ReservationNotCancellable;
 use App\Exceptions\SlotUnavailable;
 use App\Models\Reservation;
@@ -16,25 +16,31 @@ use Illuminate\Support\Facades\DB;
 
 final class ReservationService
 {
-    public function __construct(private readonly HoldExpiryService $expiry) {}
+    public function __construct(
+        private readonly HoldExpiryService $expiry,
+        private readonly ReservationWindowValidator $windows,
+    ) {}
 
     /**
      * Crea un hold. La garantía de exclusión la da PostgreSQL: si dos
      * transacciones compiten por el mismo slot, una inserta y la otra recibe
      * SQLSTATE 23P01, que acá se traduce a un 409 de dominio.
+     *
+     * `$ttlMinutes` permite un TTL corto para holds promovidos desde la waitlist.
      */
     public function hold(
         Resource $resource,
         CarbonImmutable $start,
         CarbonImmutable $end,
         ?User $user = null,
+        ?int $ttlMinutes = null,
     ): Reservation {
         $startUtc = $start->utc();
         $endUtc = $end->utc();
 
-        $this->assertValidWindow($resource, $startUtc, $endUtc);
+        $this->windows->validate($resource, $startUtc, $endUtc);
 
-        return DB::transaction(function () use ($resource, $startUtc, $endUtc, $user) {
+        return DB::transaction(function () use ($resource, $startUtc, $endUtc, $user, $ttlMinutes) {
             // Serializa los intentos que podrían solaparse. El lock es por
             // recurso + día (en la zona del recurso), no por recurso global:
             // dos reservas en días distintos no se bloquean entre sí.
@@ -52,7 +58,7 @@ final class ReservationService
                     'end_at' => $endUtc,
                     'status' => ReservationStatus::Held,
                     'expires_at' => now()->utc()->addMinutes(
-                        (int) config('slotlock.hold_ttl_minutes')
+                        $ttlMinutes ?? (int) config('slotlock.hold_ttl_minutes')
                     ),
                 ]);
             } catch (QueryException $e) {
@@ -104,7 +110,13 @@ final class ReservationService
             throw new ReservationNotCancellable;
         }
 
-        return $reservation->refresh();
+        $reservation = $reservation->refresh();
+
+        // La promoción de la waitlist corre en un listener síncrono; si falla,
+        // se loguea pero la cancelación ya está confirmada.
+        ReservationCancelled::dispatch($reservation);
+
+        return $reservation;
     }
 
     /**
@@ -133,43 +145,6 @@ final class ReservationService
             DB::select(
                 'select pg_advisory_xact_lock(hashtextextended(?::text, 0))',
                 [$resource->getKey().':'.$day],
-            );
-        }
-    }
-
-    private function assertValidWindow(
-        Resource $resource,
-        CarbonImmutable $start,
-        CarbonImmutable $end,
-    ): void {
-        if ($end->lessThanOrEqualTo($start)) {
-            throw new InvalidReservationWindow('end_at must be after start_at.');
-        }
-
-        if ($start->lessThanOrEqualTo(now()->utc())) {
-            throw new InvalidReservationWindow('start_at must be in the future.');
-        }
-
-        $slotMinutes = max(1, (int) config('slotlock.slot_minutes'));
-
-        // La granularidad se valida en la zona horaria del recurso, no en UTC.
-        $localStart = $start->setTimezone($resource->timezone);
-        $localEnd = $end->setTimezone($resource->timezone);
-
-        foreach (['start_at' => $localStart, 'end_at' => $localEnd] as $field => $moment) {
-            if ($moment->minute % $slotMinutes !== 0 || $moment->second !== 0 || $moment->micro !== 0) {
-                throw new InvalidReservationWindow(
-                    "{$field} must be aligned to {$slotMinutes}-minute slots in {$resource->timezone}."
-                );
-            }
-        }
-
-        $duration = (int) round($localStart->diffInMinutes($localEnd));
-        $maxDuration = (int) ($resource->max_duration_minutes ?: config('slotlock.max_duration_minutes'));
-
-        if ($duration > $maxDuration) {
-            throw new InvalidReservationWindow(
-                "Duration exceeds the {$maxDuration} minute limit for this resource."
             );
         }
     }

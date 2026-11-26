@@ -97,7 +97,10 @@ return new class extends Migration
             $table->timestampTz('desired_start', 6);
             $table->timestampTz('desired_end', 6);
             $table->string('status', 20)->default('waiting');
+            $table->foreignUuid('promoted_reservation_id')->nullable()->constrained('reservations')->nullOnDelete();
             $table->timestampsTz(6);
+
+            $table->index('promoted_reservation_id');
         });
 
         DB::statement(

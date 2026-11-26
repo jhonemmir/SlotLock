@@ -29,6 +29,9 @@ return [
 
     'hold_ttl_minutes' => (int) env('HOLD_TTL_MINUTES', 10),
 
+    // TTL del hold que se le otorga a una entrada de waitlist promovida.
+    'waitlist_hold_ttl_minutes' => (int) env('WAITLIST_HOLD_TTL_MINUTES', 5),
+
     /*
     |--------------------------------------------------------------------------
     | Idempotencia
