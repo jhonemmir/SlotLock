@@ -37,4 +37,19 @@ return [
 
     'idempotency_ttl_hours' => (int) env('IDEMPOTENCY_TTL_HOURS', 24),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Simulación (demo visual)
+    |--------------------------------------------------------------------------
+    |
+    | La app se llama a sí misma por HTTP para lanzar N intentos concurrentes
+    | contra la API real. En Docker el base URL es http://nginx; en local,
+    | APP_URL alcanza.
+    |
+    */
+
+    'simulate_base_url' => env('SIMULATE_BASE_URL', env('APP_URL', 'http://localhost:8000')),
+    'simulate_max_n' => (int) env('SIMULATE_MAX_N', 50),
+    'simulate_timeout_seconds' => (int) env('SIMULATE_TIMEOUT_SECONDS', 15),
+
 ];
