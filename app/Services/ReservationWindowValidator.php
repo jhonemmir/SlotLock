@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\InvalidReservationWindow;
 use App\Models\Resource;
+use App\Support\OpeningHours;
 use Carbon\CarbonImmutable;
 
 /**
@@ -42,6 +43,12 @@ final class ReservationWindowValidator
         if ($duration > $maxDuration) {
             throw new InvalidReservationWindow(
                 "Duration exceeds the {$maxDuration} minute limit for this resource."
+            );
+        }
+
+        if (! OpeningHours::covers($resource, $start, $end)) {
+            throw new InvalidReservationWindow(
+                "The requested time is outside {$resource->name}'s opening hours."
             );
         }
     }

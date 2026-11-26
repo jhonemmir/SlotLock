@@ -129,7 +129,7 @@ transacción de la nueva reserva + job de higiene cada minuto. Ver
 5. **Rangos anidados o parciales:** conflicto (cubierto por `&&` de rangos).
 6. **Granularidad mínima:** 15 minutos, validada **en la zona horaria del recurso** (no en UTC). Evita fragmentación.
 7. **Duración máxima:** `resources.max_duration_minutes` (15–1440, default 240).
-8. **Horario de operación:** `opening_hours` (JSONB) por día. **Pendiente** de validación en app (fase 2); hoy el endpoint no lo aplica.
+8. **Horario de operación:** `opening_hours` (JSONB) por día; reservas y waitlist fuera de horario se rechazan con 422. La disponibilidad solo lista slots abiertos. Soporta ventanas que cruzan medianoche (p. ej. 22:00–02:00).
 
 ## Idempotencia
 
@@ -165,7 +165,7 @@ Si la promoción no puede crear el hold (otra transacción tomó el slot entre e
 
 - `GET /api/resources/{id}/availability?date=YYYY-MM-DD`
 - Devuelve la grilla del día dividida en slots de 15 min, cada uno con estado `free` / `held` / `confirmed`, en la zona horaria del recurso.
-- Implementación: generar slots en app sobre la zona del recurso; una consulta por rango (`time_range &&`) filtrada por `blocking`.
+- Implementación: generar slots en app sobre la zona del recurso; una consulta por rango (`time_range &&`) filtrada por `blocking`; se omiten los slots fuera de `opening_hours` (incluye ventanas nocturnas).
 - Índice: el GiST de `reservations_no_overlap` sirve la consulta por rango (medido en [`docs/explain/availability.md`](../explain/availability.md)); `(resource_id, start_at)` cubre el orden y los rangos puntuales.
 
 ## Endpoints

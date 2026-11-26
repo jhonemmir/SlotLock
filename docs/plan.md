@@ -33,7 +33,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] CI: PostgreSQL 16 + migraciones + aserción de la restricción + Pint.
 - [x] App dockerizada con PHP-FPM (40 workers) para concurrencia real.
 - [x] README, ADR y specs sincronizados con el código.
-- **Entregable:** `make test` (35 tests) verde en local y en CI.
+- **Entregable:** `make test` (41 tests) verde en local y en CI.
 
 ## Fase 2 — API de reservas (núcleo) ✅
 
@@ -45,7 +45,8 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] Validación: duración, granularidad 15 min en la zona del recurso, futuro, `max_duration_minutes`.
 - [x] Idempotencia con hash canónico (endpoint + usuario + payload) y replay cacheado.
 - [ ] Autenticación y ownership ("solo el dueño cancela") — v2; hoy es una demo abierta.
-- [ ] Validación de `opening_hours` (la columna existe; el endpoint todavía no la aplica).
+- [x] Validación de `opening_hours` (por día, con ventanas nocturnas) en reservas,
+  waitlist y disponibilidad.
 - [ ] Rate limiting.
 - **Entregable:** ciclo completo probado con `.http`/curl y tests. ✅
 
@@ -85,7 +86,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] Pantalla 3: simulación ("intentar N reservas simultáneas" → resultados + barras).
 - [x] `POST /api/simulate/reservations` (server-side con `Http::pool`, rate-limited).
 - [x] Captura real en `docs/screenshots/demo.png`.
-- [ ] GIF/asciinema de 30 s (fase 7).
+- [x] GIF de la simulación (30 s) en `docs/screenshots/demo.gif`.
 - **Entregable:** demo visual en `/demo`. ✅
 
 ## Fase 7 — Pulido y documentación final ⏳
@@ -93,7 +94,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] README con quickstart, API, decisiones y evidencia parcial.
 - [x] README con resultados k6.
 - [x] Captura real de la demo en el README.
-- [ ] GIF/asciinema de la simulación (30 s).
+- [x] GIF/asciinema de la simulación (30 s).
 - [ ] Demo desplegada.
 - [ ] (Opcional) programa en C/Go para latencia p99.
 - **Entregable:** proyecto listo para portafolio.
@@ -127,8 +128,8 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 
 ## Orden de entrega recomendado para el portafolio
 
-1. **GIF/asciinema + deploy** (fase 7): lo que falta para publicar.
-2. Validación de `opening_hours` y auth/ownership (pulido).
+1. **Deploy** (fase 7): lo que falta para publicar.
+2. Auth/ownership (v2) y, si se quiere, capacidad compartida.
 3. Programa en C/Go (opcional).
 
 **Nunca cortar:** la restricción, los tests contra PostgreSQL y los planes de ejecución. Son el corazón del proyecto.

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Reservation;
 use App\Models\Resource;
+use App\Support\OpeningHours;
 use Carbon\CarbonImmutable;
 
 final class AvailabilityService
@@ -34,6 +35,11 @@ final class AvailabilityService
 
         for ($cursor = $localStart; $cursor->lessThan($localEnd); $cursor = $cursor->addMinutes($step)) {
             $slotEnd = $cursor->addMinutes($step);
+
+            if (! OpeningHours::covers($resource, $cursor->utc(), $slotEnd->utc())) {
+                continue;
+            }
+
             $status = 'free';
 
             foreach ($blocking as $reservation) {

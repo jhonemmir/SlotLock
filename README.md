@@ -9,7 +9,7 @@
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
 **Estado:** fases 0, 1, 1.5, 2, 3, 4, 5 y 6 implementadas (núcleo + API + holds + waitlist + tests + CI + k6 + demo).
-Pendiente: GIF y deploy (fase 7). Ver [`docs/plan.md`](docs/plan.md).
+Pendiente: deploy (fase 7); auth/ownership (v2). Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -40,6 +40,7 @@ Además del núcleo, el proyecto implementa:
 - **Disponibilidad** por día en la zona horaria del recurso.
 - **Tests contra PostgreSQL real** (nunca SQLite) y un test que verifica el SQLSTATE `23P01`.
 - **Prueba de carga con k6**: 100 requests concurrentes al mismo slot → 1×201 y 99×409.
+- **Horarios de operación** por recurso (incluye ventanas nocturnas) aplicados a reservas, waitlist y disponibilidad.
 - **Waitlist** con promoción FIFO automática (`SKIP LOCKED`), hold corto y notificación.
 - **Demo visual** con Blade + HTMX: grilla, conflicto visible y simulación de N intentos.
 - **CI** con PostgreSQL 16, migraciones, aserción de la restricción y Pint.
@@ -47,7 +48,7 @@ Además del núcleo, el proyecto implementa:
 
 ## Demo
 
-![Demo de SlotLock](docs/screenshots/demo.png)
+![Demo de SlotLock](docs/screenshots/demo.gif)
 
 Con el stack levantado: <http://localhost:8000/demo>
 
@@ -78,7 +79,7 @@ la clave, corre las migraciones y siembra 3 recursos.
 Otros comandos:
 
 ```bash
-make test     # 35 tests contra PostgreSQL (crea slotlock_test si falta)
+make test     # 41 tests contra PostgreSQL (crea slotlock_test si falta)
 make k6       # same-slot + distinct-slots + idempotent-retry
 make fresh    # migrate:fresh + seed (borra los datos de demo)
 make psql     # sesión psql sobre la DB de desarrollo
@@ -225,12 +226,14 @@ corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 - La granularidad de 15 minutos se valida en la zona horaria del recurso.
 - Un `start_at` sin offset se interpreta en la zona del recurso; con offset se respeta.
 - La disponibilidad se genera en la zona del recurso (soporta días de 23/25 h por DST).
+- `opening_hours` por día limita reservas y waitlist; la grilla solo muestra slots
+  abiertos. Soporta ventanas que cruzan medianoche (p. ej. 22:00–02:00).
 
 ## Evidencia
 
 ### 1. Tests
 
-`make test` → **35 tests, 137 assertions**, contra PostgreSQL 16 real:
+`make test` → **41 tests, 152 assertions**, contra PostgreSQL 16 real:
 
 - El insert solapado recibe `23P01` **sin pasar por el servicio** (la restricción es la fuente de verdad).
 - Un hold vencido no bloquea y queda en `expired`.
@@ -313,9 +316,8 @@ Decisiones de arquitectura:
 ## Limitaciones conocidas (v1)
 
 - **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist, pero no hay login ni ownership real.
-- **`opening_hours` no se valida** todavía en el endpoint (la columna y el seed existen).
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
-- **GIF y deploy**: pendientes (fase 7).
+- **Deploy**: pendiente; el stack está listo para Docker/Fly (ver [`docs/deploy.md`](docs/deploy.md)).
 
 ## Stack
 
@@ -337,7 +339,8 @@ app/
 ├── Http/                  # controladores de API y demo, requests y resources
 ├── Mail/                  # WaitlistPromoted (mailer log en dev)
 ├── Models/                # Resource, Reservation, WaitlistEntry
-└── Services/              # reserva, idempotencia, expiración, disponibilidad, waitlist, simulación
+├── Services/              # reserva, idempotencia, expiración, disponibilidad, waitlist, simulación
+└── Support/               # reglas de opening_hours
 database/migrations/       # esquema + EXCLUDE + CHECKs + índices
 docker/                    # php-fpm, nginx, init de Postgres
 docs/                      # plan, ADRs, specs, EXPLAIN, evidencia k6 y capturas

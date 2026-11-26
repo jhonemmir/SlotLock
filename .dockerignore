@@ -14,3 +14,5 @@ storage/framework/views/*
 database/*.sqlite*
 docs
 k6
+
+bootstrap/cache/*.php
