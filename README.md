@@ -8,8 +8,8 @@
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Estado:** fases 0, 1, 1.5, 2, 3, 4, 5 y 6 implementadas y **desplegado en Render + Neon** (free).
-Pendiente: auth/ownership (v2). Ver [`docs/plan.md`](docs/plan.md).
+**Estado:** **v1 completo** y desplegado en Render + Neon (free) — fases 0 a 7 cerradas (C/Go opcional fuera de scope).
+Auth/ownership queda para v2, fuera del scope de v1. Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
