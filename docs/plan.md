@@ -89,15 +89,15 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] GIF de la simulación (30 s) en `docs/screenshots/demo.gif`.
 - **Entregable:** demo visual en `/demo`. ✅
 
-## Fase 7 — Pulido y documentación final ⏳
+## Fase 7 — Pulido y documentación final ✅
 
 - [x] README con quickstart, API, decisiones y evidencia parcial.
 - [x] README con resultados k6.
 - [x] Captura real de la demo en el README.
 - [x] GIF/asciinema de la simulación (30 s).
-- [ ] Demo desplegada.
+- [x] Demo desplegada en Render + Neon (free).
 - [ ] (Opcional) programa en C/Go para latencia p99.
-- **Entregable:** proyecto listo para portafolio.
+- **Entregable:** proyecto listo para portafolio. ✅
 
 ## Criterios de "done" por fase
 

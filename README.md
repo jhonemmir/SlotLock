@@ -8,8 +8,8 @@
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Estado:** fases 0, 1, 1.5, 2, 3, 4, 5 y 6 implementadas (núcleo + API + holds + waitlist + tests + CI + k6 + demo).
-Pendiente: deploy (fase 7); auth/ownership (v2). Ver [`docs/plan.md`](docs/plan.md).
+**Estado:** fases 0, 1, 1.5, 2, 3, 4, 5 y 6 implementadas y **desplegado en Render + Neon** (free).
+Pendiente: auth/ownership (v2). Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -48,9 +48,13 @@ Además del núcleo, el proyecto implementa:
 
 ## Demo
 
+**En vivo:** <https://slotlock-demo.onrender.com/demo>
+
 ![Demo de SlotLock](docs/screenshots/demo.gif)
 
-Con el stack levantado: <http://localhost:8000/demo>
+La demo corre en Render free + Neon free: si estuvo inactiva, la primera visita
+puede tardar ~1 min (cold start). Localmente: <http://localhost:8000/demo> con el
+stack levantado.
 
 - Grilla de disponibilidad por recurso y día (slots de 15 min).
 - Reserva de un hold; si el slot ya está tomado, el `409` se ve en pantalla.
@@ -331,7 +335,8 @@ Decisiones de arquitectura:
 
 - **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist, pero no hay login ni ownership real.
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
-- **Deploy**: guía sin costo (Render + Neon) en [`docs/deploy.md`](docs/deploy.md); la imagen de producción está validada localmente.
+- **Deploy**: la demo está en Render free + Neon free; puede dormir por inactividad (cold start ~1 min). Guía en [`docs/deploy.md`](docs/deploy.md).
+- **Repo privado**: se puede hacer público cuando quieras; el deploy no depende de eso.
 
 ## Stack
 

@@ -1,5 +1,7 @@
 # Deploy — SlotLock demo
 
+**Demo en vivo:** <https://slotlock-demo.onrender.com/demo> — Render free + Neon free.
+
 La imagen de producción (`Dockerfile.prod`) es **portable**: escucha en `$PORT`
 (Render/Koyeb/Cloud Run lo inyectan; Fly lo fija en `fly.toml`). La demo se llama
 a sí misma por `http://127.0.0.1:$PORT`, y `RUN_MIGRATIONS=true` ejecuta
