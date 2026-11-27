@@ -181,4 +181,6 @@ Si la promoción no puede crear el hold (otra transacción tomó el slot entre e
 | POST | `/api/simulate/reservations` | ✅ implementado (fase 6, máx. 50) |
 | GET | `/health` | ✅ implementado (incluye `SELECT 1`) |
 
+Las escrituras requieren `X-Demo-Key` (gatekeeping público, no auth); las lecturas son públicas. La clave se muestra en el README y en el footer de la demo.
+
 El endpoint `/api/simulate/reservations` recibe `{ resource_id, start_at, end_at, n }` y lanza N intentos concurrentes server-side con `Http::pool`, devolviendo `{ n, succeeded, rejected, errors, duration_ms }`. Cada intento usa una `Idempotency-Key` distinta. Es la base de la tercera pantalla de la demo.

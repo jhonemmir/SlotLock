@@ -41,7 +41,10 @@ final class SimulationService
                 $pool->as((string) $i)
                     ->timeout($timeout)
                     ->asJson()
-                    ->withHeaders(['Idempotency-Key' => (string) Str::uuid()])
+                    ->withHeaders([
+                        'Idempotency-Key' => (string) Str::uuid(),
+                        'X-Demo-Key' => (string) config('slotlock.demo_api_key'),
+                    ])
                     ->post("{$base}/api/reservations", $payload);
             }
         });

@@ -42,6 +42,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Gatekeeping de escrituras (no es autenticación real)
+    |--------------------------------------------------------------------------
+    |
+    | La clave es pública: se muestra en el README y en la demo. Solo evita
+    | que un crawler/bot random cree o borre holds de la demo.
+    |
+    */
+
+    'demo_api_key' => env('DEMO_API_KEY', 'slotlock-demo'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Simulación (demo visual)
     |--------------------------------------------------------------------------
     |

@@ -18,6 +18,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
+DEMO_KEY = os.environ.get("DEMO_KEY", "slotlock-demo")
+WRITE_HEADERS = {"X-Demo-Key": DEMO_KEY}
 
 
 def ok(message: str) -> None:
@@ -89,14 +91,14 @@ ok(f"disponibilidad: {len(free)} slots libres el {day}")
 
 # 4. Crear un hold.
 key = str(uuid.uuid4())
-status, _, created = call("POST", "/api/reservations", hold_payload(first), {"Idempotency-Key": key})
+status, _, created = call("POST", "/api/reservations", hold_payload(first), {**WRITE_HEADERS, "Idempotency-Key": key})
 if status != 201 or not isinstance(created, dict) or "id" not in created:
     fail(f"crear hold devolvió {status}: {created}")
 reservation_id = created["id"]
 ok(f"hold creado ({reservation_id})")
 
 # 5. Replay con la misma clave: mismo id + header de replay.
-status, headers, replay = call("POST", "/api/reservations", hold_payload(first), {"Idempotency-Key": key})
+status, headers, replay = call("POST", "/api/reservations", hold_payload(first), {**WRITE_HEADERS, "Idempotency-Key": key})
 if status != 201 or (replay or {}).get("id") != reservation_id:
     fail(f"el replay no devolvió el mismo id: {status} {replay}")
 if headers.get("idempotency-replayed") != "true":
@@ -104,7 +106,7 @@ if headers.get("idempotency-replayed") != "true":
 ok("idempotencia: mismo id + replay")
 
 # 6. Mismo slot, otra clave: 409 de la restricción.
-status, _, conflict = call("POST", "/api/reservations", hold_payload(first), {"Idempotency-Key": str(uuid.uuid4())})
+status, _, conflict = call("POST", "/api/reservations", hold_payload(first), {**WRITE_HEADERS, "Idempotency-Key": str(uuid.uuid4())})
 if status != 409 or (conflict or {}).get("error") != "slot_already_taken":
     fail(f"conflicto inesperado: {status} {conflict}")
 ok("conflicto: 409 slot_already_taken")
@@ -114,6 +116,7 @@ status, _, simulation = call(
     "POST",
     "/api/simulate/reservations",
     {**hold_payload(second), "n": 10},
+    WRITE_HEADERS,
     timeout=180,
 )
 if status != 200 or simulation.get("succeeded") != 1 or simulation.get("rejected") != 9 or simulation.get("errors"):
@@ -121,7 +124,7 @@ if status != 200 or simulation.get("succeeded") != 1 or simulation.get("rejected
 ok("simulación: 1 creada / 9 rechazadas")
 
 # 8. Cancelar el hold para dejar el slot libre.
-status, _, _ = call("DELETE", f"/api/reservations/{reservation_id}")
+status, _, _ = call("DELETE", f"/api/reservations/{reservation_id}", headers=WRITE_HEADERS)
 if status != 204:
     fail(f"cancelar devolvió {status}")
 ok("cancelación: 204")

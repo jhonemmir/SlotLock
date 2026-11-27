@@ -83,7 +83,7 @@ la clave, corre las migraciones y siembra 3 recursos.
 Otros comandos:
 
 ```bash
-make test     # 41 tests contra PostgreSQL (crea slotlock_test si falta)
+make test     # 43 tests contra PostgreSQL (crea slotlock_test si falta)
 make k6       # same-slot + distinct-slots + idempotent-retry
 make smoke    # smoke test contra http://localhost:8000
 make fresh    # migrate:fresh + seed (borra los datos de demo)
@@ -105,18 +105,31 @@ make logs
 |---|---|---|
 | `GET` | `/api/resources` | Lista de recursos |
 | `GET` | `/api/resources/{id}/availability?date=YYYY-MM-DD` | Grilla de 15 min (`free`/`held`/`confirmed`) |
-| `POST` | `/api/reservations` | Crea un hold. Requiere `Idempotency-Key` |
-| `POST` | `/api/reservations/{id}/confirm` | Confirma un hold dentro del TTL |
-| `DELETE` | `/api/reservations/{id}` | Cancela un hold o una reserva confirmada |
-| `POST` | `/api/waitlist` | Registra interés en un slot ocupado |
-| `POST` | `/api/simulate/reservations` | Simula N intentos concurrentes (máx. 50, rate-limited) |
+| `POST` | `/api/reservations` | Crea un hold. Requiere `Idempotency-Key` y `X-Demo-Key` |
+| `POST` | `/api/reservations/{id}/confirm` | Confirma un hold dentro del TTL (write: `X-Demo-Key`) |
+| `DELETE` | `/api/reservations/{id}` | Cancela un hold o una reserva confirmada (write: `X-Demo-Key`) |
+| `POST` | `/api/waitlist` | Registra interés en un slot ocupado (write: `X-Demo-Key`) |
+| `POST` | `/api/simulate/reservations` | Simula N intentos concurrentes (write: `X-Demo-Key`) |
 | `GET` | `/health` | Estado de la app + `SELECT 1` a la DB |
+
+### Gatekeeping de escrituras
+
+Las escrituras (`POST`/`DELETE` de reservas, confirmación, waitlist y simulación, y los `POST` de `/demo`) requieren:
+
+```text
+X-Demo-Key: slotlock-demo
+```
+
+No es autenticación: la clave es **pública** (está en el README, en el footer de la demo y en `.env.example`) y solo evita que un crawler aleatorio cree o borre holds. Las lecturas (`/api/resources`, availability, `/health`) son públicas. La demo HTMX la envía automáticamente vía `hx-headers`; si cambiás `DEMO_API_KEY`, actualizá `DEMO_KEY` en los scripts.
 
 ```bash
 # Crear un hold (el recurso "Sala A" viene del seeder).
 # Ajustá las fechas a un slot futuro libre.
+DEMO_KEY=slotlock-demo
+
 curl -i -X POST localhost:8000/api/reservations \
   -H 'Content-Type: application/json' \
+  -H "X-Demo-Key: $DEMO_KEY" \
   -H "Idempotency-Key: $(cat /proc/sys/kernel/random/uuid)" \
   -d '{
         "resource_id": "00000000-0000-4000-8000-000000000001",
@@ -129,6 +142,8 @@ Errores de dominio:
 
 | HTTP | `error` | Cuándo |
 |---|---|---|
+| `401` | `missing_demo_key` | Falta `X-Demo-Key` en una escritura |
+| `401` | `invalid_demo_key` | La clave no coincide |
 | `400` | `missing_idempotency_key` | Falta el header |
 | `400` | `invalid_idempotency_key` | El header no es un UUID |
 | `409` | `slot_already_taken` | La restricción `EXCLUDE` rechazó el insert |
@@ -238,7 +253,7 @@ corrección. Medido con 100 requests concurrentes: 1×201, 99×409, 0×5xx.
 
 ### 1. Tests
 
-`make test` → **41 tests, 152 assertions**, contra PostgreSQL 16 real:
+`make test` → **43 tests, 159 assertions**, contra PostgreSQL 16 real:
 
 - El insert solapado recibe `23P01` **sin pasar por el servicio** (la restricción es la fuente de verdad).
 - Un hold vencido no bloquea y queda en `expired`.
@@ -334,7 +349,7 @@ Decisiones de arquitectura:
 
 ## Limitaciones conocidas (v1)
 
-- **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist, pero no hay login ni ownership real.
+- **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist; `X-Demo-Key` es solo gatekeeping público, no auth ni ownership.
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
 - **Deploy**: la demo está en Render free + Neon free; puede dormir por inactividad (cold start ~1 min). Guía en [`docs/deploy.md`](docs/deploy.md).
 - **Repo privado**: se puede hacer público cuando quieras; el deploy no depende de eso.

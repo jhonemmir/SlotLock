@@ -37,6 +37,7 @@ KEY="${IDEMPOTENCY_KEY:-$(uuid)}"
 curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BASE_URL/api/reservations" \
     -H 'Content-Type: application/json' \
     -H "Idempotency-Key: $KEY" \
+    -H "X-Demo-Key: ${DEMO_KEY:-slotlock-demo}" \
     -d "{
         \"resource_id\": \"$RESOURCE_ID\",
         \"start_at\": \"$START_AT\",

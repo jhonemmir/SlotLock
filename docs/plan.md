@@ -33,7 +33,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] CI: PostgreSQL 16 + migraciones + aserción de la restricción + Pint.
 - [x] App dockerizada con PHP-FPM (40 workers) para concurrencia real.
 - [x] README, ADR y specs sincronizados con el código.
-- **Entregable:** `make test` (41 tests) verde en local y en CI.
+- **Entregable:** `make test` (43 tests) verde en local y en CI.
 
 ## Fase 2 — API de reservas (núcleo) ✅
 
@@ -96,6 +96,7 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] Captura real de la demo en el README.
 - [x] GIF/asciinema de la simulación (30 s).
 - [x] Demo desplegada en Render + Neon (free).
+- [x] Gatekeeping de escrituras con `X-Demo-Key` (público, no auth).
 - [ ] (Opcional) programa en C/Go para latencia p99.
 - **Entregable:** proyecto listo para portafolio. ✅
 

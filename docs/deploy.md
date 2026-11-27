@@ -81,6 +81,7 @@ Free, Dockerfile `Dockerfile.prod`, health check `/health`, y las variables:
 | `LOG_CHANNEL` | `stderr` |
 | `MAIL_MAILER` | `log` |
 | `RUN_MIGRATIONS` | `true` |
+| `DEMO_API_KEY` | `slotlock-demo` (público) |
 | `DB_SSLMODE` | `require` |
 | `DATABASE_URL` | Neon (directo) |
 | `APP_KEY` | `base64:...` |

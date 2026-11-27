@@ -266,6 +266,38 @@ class ReservationFlowTest extends TestCase
             ->assertJsonPath('error', 'missing_idempotency_key');
     }
 
+    public function test_writes_require_a_valid_demo_key(): void
+    {
+        [$start, $end] = $this->slot();
+
+        $this->withHeader('X-Demo-Key', 'wrong-key')
+            ->postJson('/api/reservations', [
+                'resource_id' => $this->resource->id,
+                'start_at' => $start->toIso8601String(),
+                'end_at' => $end->toIso8601String(),
+            ], ['Idempotency-Key' => (string) Str::uuid()])
+            ->assertStatus(401)
+            ->assertJsonPath('error', 'invalid_demo_key');
+
+        $this->assertDatabaseCount('reservations', 0);
+    }
+
+    public function test_writes_require_the_demo_key_header(): void
+    {
+        [$start, $end] = $this->slot();
+
+        $this->withHeader('X-Demo-Key', '')
+            ->postJson('/api/reservations', [
+                'resource_id' => $this->resource->id,
+                'start_at' => $start->toIso8601String(),
+                'end_at' => $end->toIso8601String(),
+            ], ['Idempotency-Key' => (string) Str::uuid()])
+            ->assertStatus(401)
+            ->assertJsonPath('error', 'missing_demo_key');
+
+        $this->assertDatabaseCount('reservations', 0);
+    }
+
     public function test_start_at_must_be_in_the_future(): void
     {
         $payload = [

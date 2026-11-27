@@ -13,6 +13,7 @@ primary_region = "iad"
   DB_CONNECTION = "pgsql"
   LOG_CHANNEL = "stderr"
   MAIL_MAILER = "log"
+  DEMO_API_KEY = "slotlock-demo"
   PORT = "8080"
 
 [http_service]

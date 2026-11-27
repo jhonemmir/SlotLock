@@ -123,6 +123,10 @@ class DemoTest extends TestCase
         });
 
         $this->assertCount(5, array_unique(array_filter($keys)));
+
+        Http::assertSent(
+            fn (ClientRequest $request) => ($request->header('X-Demo-Key')[0] ?? null) === (string) config('slotlock.demo_api_key'),
+        );
     }
 
     public function test_simulation_rejects_more_than_the_configured_max(): void

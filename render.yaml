@@ -27,6 +27,8 @@ services:
         value: "true"
       - key: SIMULATE_MAX_N
         value: "50"
+      - key: DEMO_API_KEY
+        value: slotlock-demo
       # Valores que se completan en el dashboard al aplicar el blueprint:
       - key: APP_KEY
         sync: false

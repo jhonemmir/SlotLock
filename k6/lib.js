@@ -2,6 +2,7 @@ import http from 'k6/http';
 
 export const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
 export const RESOURCE_ID = __ENV.RESOURCE_ID || '00000000-0000-4000-8000-000000000001';
+export const DEMO_KEY = __ENV.DEMO_KEY || 'slotlock-demo';
 
 /**
  * Devuelve un slot de 1 hora, alineado a 15 minutos y en el futuro.
@@ -70,6 +71,7 @@ export function holdParams(key) {
         headers: {
             'Content-Type': 'application/json',
             'Idempotency-Key': key,
+            'X-Demo-Key': DEMO_KEY,
         },
         tags: { name: 'POST /api/reservations' },
     };

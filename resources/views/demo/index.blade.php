@@ -12,7 +12,7 @@
     <script src="/vendor/htmx.min.js" defer></script>
     <script src="/js/demo.js" defer></script>
 </head>
-<body>
+<body hx-headers="{{ json_encode(['X-Demo-Key' => config('slotlock.demo_api_key')]) }}">
     <header class="top">
         <a class="brand" href="/">Slot<span>Lock</span></a>
         <nav>
@@ -150,6 +150,7 @@
 
     <footer>
         <span>SlotLock · demo de la restricción <code>EXCLUDE USING gist</code></span>
+        <span>Escrituras: <code>X-Demo-Key: {{ config('slotlock.demo_api_key') }}</code></span>
         <span>PHP 8.4 · Laravel 13 · PostgreSQL 16</span>
     </footer>
 </body>
