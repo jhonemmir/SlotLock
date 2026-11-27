@@ -4,7 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SlotLock — Demo de concurrencia</title>
-    <link rel="stylesheet" href="/css/demo.css">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="color-scheme" content="dark">
+    <link rel="stylesheet" href="/css/tokens.css?v=2">
+    <link rel="stylesheet" href="/css/base.css?v=2">
+    <link rel="stylesheet" href="/css/demo.css?v=2">
     <script src="/vendor/htmx.min.js" defer></script>
     <script src="/js/demo.js" defer></script>
 </head>
@@ -73,9 +77,9 @@
                 @include('demo._availability')
 
                 <div class="legend">
-                    <span><i class="dot free"></i> libre</span>
-                    <span><i class="dot held"></i> hold (10 min)</span>
-                    <span><i class="dot confirmed"></i> confirmada</span>
+                    <span><i class="dot free" aria-hidden="true"></i> libre</span>
+                    <span><i class="dot held" aria-hidden="true"></i> hold (10 min)</span>
+                    <span><i class="dot confirmed" aria-hidden="true"></i> confirmada</span>
                     <span class="legend-note">Clic en cualquier slot para seleccionarlo.</span>
                 </div>
             </section>
@@ -99,7 +103,7 @@
                         <input type="hidden" name="start_at" id="start_at">
                         <input type="hidden" name="end_at" id="end_at">
 
-                        <p class="selection" id="selected-slot">Elegí un horario en la grilla.</p>
+                        <p class="selection" id="selected-slot" aria-live="polite">Elegí un horario en la grilla.</p>
 
                         <div class="actions">
                             <button type="submit" id="book-button" disabled>Crear hold</button>

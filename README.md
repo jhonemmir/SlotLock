@@ -330,6 +330,7 @@ Decisiones de arquitectura:
 
 - [ADR 0001 — Stack, base de datos y estrategia de concurrencia](docs/adr/0001-stack-y-decisiones.md)
 - [ADR 0002 — Expiración de holds](docs/adr/0002-expiracion-de-holds.md)
+- [Design system y tokens](design-system/slotlock/MASTER.md) — paleta dark, tipografía, espaciado y estados.
 
 ## Limitaciones conocidas (v1)
 
@@ -361,10 +362,11 @@ app/
 ├── Services/              # reserva, idempotencia, expiración, disponibilidad, waitlist, simulación
 └── Support/               # reglas de opening_hours
 database/migrations/       # esquema + EXCLUDE + CHECKs + índices
+design-system/             # MASTER.md persistido (tokens y reglas visuales)
 docker/                    # php-fpm, nginx, init de Postgres
 docs/                      # plan, ADRs, specs, EXPLAIN, evidencia k6 y capturas
 k6/                        # same-slot, distinct-slots, idempotent-retry
-public/                    # css/js de la demo + htmx vendorizado
+public/                    # tokens.css, base.css, css/js de la demo + htmx vendorizado
 resources/views/demo/      # grilla, reserva y simulación (HTMX)
 scripts/                   # hold.sh, concurrency.sh y smoke.py (verificación)
 tests/Feature/             # la suite contra PostgreSQL real

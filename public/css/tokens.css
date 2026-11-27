@@ -1,0 +1,184 @@
+:root {
+    color-scheme: dark;
+
+    /*
+     * Tokens semánticos existentes, actualizados al design system dark.
+     * Se mantienen los nombres para no romper las vistas y se agregan los
+     * que faltaban (tipografía, espaciado, radios, sombras y estados).
+     */
+    --bg: #0f172a;
+    --bg-glow: #1e293b;
+    --bg-glow-size: 1100px 600px;
+    --bg-glow-start: 0%;
+    --bg-glow-stop: 55%;
+    --bg-glow-position-landing: 15% -10%;
+    --bg-glow-position-demo: 10% -10%;
+    --panel: #1b2336;
+    --panel-2: #272f42;
+    --line: #475569;
+    --line-subtle: #334155;
+    --line-strong: #7d8ea8;
+    --text: #f8fafc;
+    --muted: #94a3b8;
+
+    --brand: #5eead4;
+    --brand-hover: #2dd4bf;
+    --brand-soft: rgba(94, 234, 212, 0.12);
+    --brand-border: rgba(94, 234, 212, 0.35);
+
+    --accent: #22c55e;
+    --accent-hover: #16a34a;
+    --accent-active: #16a34a;
+    --accent-contrast: #0f172a;
+    --accent-soft: rgba(34, 197, 94, 0.14);
+    --accent-border: rgba(34, 197, 94, 0.42);
+
+    /* Token existente: antes lima; ahora el secundario de marca (teal). */
+    --accent-2: var(--brand);
+
+    --warn: #fbbf24;
+    --warn-soft: rgba(251, 191, 36, 0.14);
+    --warn-border: rgba(251, 191, 36, 0.42);
+    --warn-contrast: #0f172a;
+
+    --danger: #ef4444;
+    --danger-text: #fca5a5;
+    --danger-soft: rgba(239, 68, 68, 0.14);
+    --danger-border: rgba(239, 68, 68, 0.42);
+    --danger-contrast: #000000;
+
+    --code: #0b1220;
+    --code-text: #e2e8f0;
+    --code-inline-bg: rgba(148, 163, 184, 0.14);
+    --code-inline-text: #e2e8f0;
+
+    --syntax-keyword: #c084fc;
+    --syntax-string: #5eead4;
+    --syntax-number: #fbbf24;
+    --syntax-variable: #93c5fd;
+
+    --status-free-strong: var(--accent);
+    --status-free-bg: var(--accent-soft);
+    --status-free-border: var(--accent-border);
+    --status-held-strong: var(--warn);
+    --status-held-bg: var(--warn-soft);
+    --status-held-border: var(--warn-border);
+    --status-confirmed-strong: var(--danger);
+    --status-confirmed-bg: var(--danger-soft);
+    --status-confirmed-border: var(--danger-border);
+
+    --focus-ring: #ffffff;
+    --focus-ring-width: 2px;
+    --focus-ring-offset: 2px;
+    --selected-ring: #f8fafc;
+    --selected-glow: 0 0 18px rgba(94, 234, 212, 0.22);
+    --hover-overlay: rgba(248, 250, 252, 0.06);
+    --active-overlay: rgba(248, 250, 252, 0.1);
+    --disabled-opacity: 0.45;
+
+    --border-width: 1px;
+
+    --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-heading: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --text-2xs: 0.6875rem;
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-display: clamp(2rem, 5vw, 3.25rem);
+    --text-h1: clamp(1.8rem, 4vw, 2.9rem);
+
+    --tracking-tight: -0.02em;
+    --tracking-snug: -0.01em;
+    --tracking-wide: 0.05em;
+    --tracking-wider: 0.08em;
+
+    --leading-tight: 1.15;
+    --leading-normal: 1.55;
+    --leading-relaxed: 1.65;
+
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+
+    --space-3xs: 0.125rem;
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+    --space-2xl: 3rem;
+    --space-3xl: 4rem;
+    --space-4xl: 5rem;
+
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    --radius-full: 999px;
+
+    --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.4);
+    --shadow-md: 0 8px 24px rgba(2, 6, 23, 0.35);
+    --shadow-lg: 0 20px 50px rgba(2, 6, 23, 0.45);
+    --shadow-accent: 0 0 0 1px var(--accent-border), 0 8px 24px rgba(34, 197, 94, 0.18);
+    --shadow-inset: inset 0 2px 4px rgba(2, 6, 23, 0.25);
+    --text-glow-brand: 0 0 22px rgba(94, 234, 212, 0.22);
+
+    --container: 1080px;
+    --container-narrow: 980px;
+    --measure: 62ch;
+    --measure-wide: 68ch;
+    --gutter: clamp(1rem, 4vw, 1.5rem);
+
+    --slot-height: 26px;
+    --slot-height-sm: 32px;
+    --slot-hour-width: 52px;
+    --slot-hour-width-sm: 40px;
+    --stripe-size: 4px;
+    --stripe-thickness: 1px;
+    --dot-size: 10px;
+    --sim-bar-size: 12px;
+    --columns-min: 320px;
+    --card-min: 240px;
+    --input-number-width: 5.125rem;
+    --spinner-size: 16px;
+    --spinner-border: 2px;
+    --spinner-track: rgba(148, 163, 184, 0.28);
+    --control-height: 44px;
+    --control-height-sm: 40px;
+    --input-height: 42px;
+
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slow: 300ms;
+    --duration-spinner: 700ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /*
+     * Alias del design system persistido (design-system/slotlock/MASTER.md).
+     * No es un sistema paralelo: apuntan a los tokens de arriba.
+     */
+    --color-primary: #1e293b;
+    --color-on-primary: #ffffff;
+    --color-secondary: #334155;
+    --color-on-secondary: #ffffff;
+    --color-accent: var(--accent);
+    --color-on-accent: var(--accent-contrast);
+    --color-background: var(--bg);
+    --color-foreground: var(--text);
+    --color-card: var(--panel);
+    --color-card-foreground: var(--text);
+    --color-muted: var(--panel-2);
+    --color-muted-foreground: var(--muted);
+    --color-border: var(--line);
+    --color-destructive: var(--danger);
+    --color-on-destructive: var(--danger-contrast);
+    --color-ring: var(--focus-ring);
+}

@@ -4,68 +4,227 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SlotLock — reservas con concurrencia real</title>
+    <meta name="theme-color" content="#0f172a">
+    <meta name="color-scheme" content="dark">
+    <link rel="stylesheet" href="/css/tokens.css?v=2">
+    <link rel="stylesheet" href="/css/base.css?v=2">
     <style>
-        :root {
-            --bg: #0b1120;
-            --panel: #111a2e;
-            --line: #22304d;
-            --text: #e6edf7;
-            --muted: #94a6c4;
-            --accent: #5eead4;
-            --accent-2: #a3e635;
-            --code: #07101f;
-        }
-        * { box-sizing: border-box; }
         body {
-            margin: 0;
-            background: radial-gradient(1100px 600px at 15% -10%, #16304a 0%, var(--bg) 55%);
+            background: radial-gradient(var(--bg-glow-size) at var(--bg-glow-position-landing), var(--bg-glow) var(--bg-glow-start), var(--bg) var(--bg-glow-stop));
+        }
+
+        .wrap {
+            max-width: var(--container-narrow);
+            margin: 0 auto;
+            padding: var(--space-xl) var(--gutter) var(--space-3xl);
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-md);
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            font-family: var(--font-heading);
+            font-weight: var(--weight-bold);
+            letter-spacing: var(--tracking-tight);
+            font-size: var(--text-lg);
             color: var(--text);
-            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-            line-height: 1.6;
         }
-        .wrap { max-width: 980px; margin: 0 auto; padding: 32px 22px 64px; }
-        header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-        .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 1.15rem; }
-        .brand span { color: var(--accent); }
-        nav { display: flex; gap: 18px; font-size: .9rem; }
-        a { color: var(--muted); text-decoration: none; }
-        a:hover { color: var(--accent); }
-        .hero { margin-top: 64px; }
+
+        .brand span {
+            color: var(--brand);
+        }
+
+        nav {
+            display: flex;
+            gap: var(--space-xs);
+            font-size: var(--text-sm);
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            display: inline-flex;
+            align-items: center;
+            min-height: var(--control-height-sm);
+            padding: var(--space-3xs) var(--space-sm);
+            border-radius: var(--radius-sm);
+            transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+        }
+
+        nav a:hover {
+            color: var(--brand);
+            background: var(--hover-overlay);
+        }
+
+        .hero {
+            margin-top: var(--space-3xl);
+        }
+
         .pill {
-            display: inline-block; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase;
-            color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
-            background: rgba(94, 234, 212, .06);
-        }
-        h1 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.1; letter-spacing: -0.03em; margin: 18px 0 14px; }
-        h1 em { font-style: normal; color: var(--accent); }
-        .lead { color: var(--muted); font-size: 1.08rem; max-width: 62ch; }
-        .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 40px; }
-        .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
-        .card h2 { font-size: .95rem; margin: 0 0 8px; color: var(--accent-2); }
-        .card p { margin: 0; color: var(--muted); font-size: .92rem; }
-        pre {
-            background: var(--code); border: 1px solid var(--line); border-radius: 14px;
-            padding: 18px; overflow-x: auto; font-size: .84rem; line-height: 1.6;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        }
-        .sql-k { color: #c084fc; } .sql-c { color: var(--accent); } .sql-s { color: #fbbf24; } .sql-n { color: #93c5fd; }
-        .section { margin-top: 56px; }
-        .section h3 { font-size: 1.25rem; letter-spacing: -0.01em; margin: 0 0 14px; }
-        ul.checks { list-style: none; padding: 0; margin: 0; color: var(--muted); }
-        ul.checks li { padding-left: 26px; position: relative; margin-bottom: 8px; }
-        ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
-        footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        code { background: rgba(148, 166, 196, .12); padding: 2px 6px; border-radius: 5px; font-family: ui-monospace, Menlo, monospace; font-size: .85em; }
-        .cta {
             display: inline-block;
-            margin-top: 24px;
-            background: var(--accent);
-            color: #04201c;
-            font-weight: 700;
-            padding: 11px 20px;
-            border-radius: 10px;
+            font-size: var(--text-xs);
+            letter-spacing: var(--tracking-wider);
+            text-transform: uppercase;
+            color: var(--brand);
+            border: var(--border-width) solid var(--line-subtle);
+            border-radius: var(--radius-full);
+            padding: var(--space-xs) var(--space-sm);
+            background: var(--brand-soft);
         }
-        .cta:hover { color: #04201c; filter: brightness(1.08); }
+
+        h1 {
+            font-size: var(--text-display);
+            line-height: var(--leading-tight);
+            letter-spacing: var(--tracking-tight);
+            margin: var(--space-md) 0 var(--space-sm);
+        }
+
+        h1 em {
+            font-style: normal;
+            color: var(--brand);
+            text-shadow: var(--text-glow-brand);
+        }
+
+        .lead {
+            color: var(--muted);
+            font-size: var(--text-lg);
+            max-width: var(--measure);
+        }
+
+        .lead--spaced {
+            margin-top: var(--space-sm);
+        }
+
+        .grid {
+            display: grid;
+            gap: var(--space-md);
+            grid-template-columns: repeat(auto-fit, minmax(var(--card-min), 1fr));
+            margin-top: var(--space-2xl);
+        }
+
+        .card {
+            background: var(--panel);
+            border: var(--border-width) solid var(--line-subtle);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card h2 {
+            font-size: var(--text-sm);
+            letter-spacing: var(--tracking-snug);
+            margin: 0 0 var(--space-sm);
+            color: var(--brand);
+        }
+
+        .card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: var(--text-sm);
+        }
+
+        pre {
+            background: var(--code);
+            border: var(--border-width) solid var(--line-subtle);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            overflow-x: auto;
+            font-size: var(--text-sm);
+            line-height: var(--leading-relaxed);
+            color: var(--code-text);
+        }
+
+        .sql-k { color: var(--syntax-keyword); }
+        .sql-c { color: var(--muted); }
+        .sql-s { color: var(--syntax-number); }
+        .sql-n { color: var(--syntax-variable); }
+
+        .section {
+            margin-top: var(--space-3xl);
+        }
+
+        .section h3 {
+            font-size: var(--text-xl);
+            letter-spacing: var(--tracking-snug);
+            margin: 0 0 var(--space-sm);
+            color: var(--text);
+        }
+
+        ul.checks {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            color: var(--muted);
+        }
+
+        ul.checks li {
+            padding-left: var(--space-lg);
+            position: relative;
+            margin-bottom: var(--space-sm);
+        }
+
+        ul.checks li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: var(--weight-bold);
+        }
+
+        footer {
+            margin-top: var(--space-3xl);
+            padding-top: var(--space-lg);
+            border-top: var(--border-width) solid var(--line-subtle);
+            color: var(--muted);
+            font-size: var(--text-xs);
+            display: flex;
+            justify-content: space-between;
+            gap: var(--space-sm);
+            flex-wrap: wrap;
+        }
+
+        .cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: var(--space-lg);
+            min-height: var(--control-height);
+            background: var(--accent);
+            color: var(--accent-contrast);
+            font-family: var(--font-sans);
+            font-weight: var(--weight-semibold);
+            font-size: var(--text-sm);
+            padding: var(--space-sm) var(--space-lg);
+            border: var(--border-width) solid transparent;
+            border-radius: var(--radius-md);
+            transition: background-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+        }
+
+        .cta:hover {
+            background: var(--accent-hover);
+            color: var(--accent-contrast);
+            box-shadow: var(--shadow-accent);
+        }
+
+        .cta:active {
+            background: var(--accent-active);
+            box-shadow: var(--shadow-inset);
+        }
+
+        @media (max-width: 640px) {
+            .wrap { padding: var(--space-lg) var(--gutter) var(--space-2xl); }
+            .hero { margin-top: var(--space-2xl); }
+            .lead { font-size: var(--text-base); }
+            .grid { margin-top: var(--space-xl); }
+            .card { padding: var(--space-md); }
+            pre { padding: var(--space-md); white-space: pre-wrap; overflow-wrap: anywhere; }
+            .section { margin-top: var(--space-2xl); }
+            footer { margin-top: var(--space-2xl); }
+        }
     </style>
 </head>
 <body>
@@ -114,7 +273,7 @@
     resource_id <span class="sql-k">WITH</span> =,
     time_range  <span class="sql-k">WITH</span> &&
   ) <span class="sql-k">WHERE</span> (status <span class="sql-k">IN</span> (<span class="sql-s">'held'</span>, <span class="sql-s">'confirmed'</span>));</code></pre>
-            <p class="lead" style="margin-top:14px">
+            <p class="lead lead--spaced">
                 Dos transacciones que insertan el mismo rango para el mismo recurso se serializan
                 por el índice GiST: la segunda recibe <code>23P01</code> y la API responde
                 <code>409 slot_already_taken</code>.
@@ -148,7 +307,7 @@ curl -s -X POST localhost:8000/api/reservations \
 
         <footer>
             <span>SlotLock · proyecto de portafolio</span>
-            <span>PHP 8.3 · Laravel · PostgreSQL 16</span>
+            <span>PHP 8.4 · Laravel 13 · PostgreSQL 16</span>
         </footer>
     </div>
 </body>
