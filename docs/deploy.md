@@ -175,6 +175,39 @@ fallback de `DB_URL`. El release command de `fly.toml` corre migraciones y seed.
 El scheduler no corre en este deploy; la expiración oportunista mantiene la
 corrección.
 
+## Verificación post-deploy
+
+1. **Smoke test** desde tu máquina (solo necesita Python 3):
+
+   ```bash
+   BASE_URL=https://slotlock-demo.onrender.com python3 scripts/smoke.py
+   ```
+
+   Verifica: health, recursos, disponibilidad, alta, replay idempotente,
+   conflicto 409, simulación 1/9 y cancelación. Si imprime todo ✓, el deploy
+   funciona de punta a punta.
+
+2. **Neon SQL Editor**:
+
+   ```sql
+   select extname from pg_extension where extname = 'btree_gist';
+   select conname from pg_constraint where conname = 'reservations_no_overlap';
+
+   select status, count(*) from reservations group by 1;
+   select count(*) from idempotency_keys;
+   ```
+
+   Debe existir `btree_gist`, la restricción, y después de una simulación debe
+   haber una sola fila `held` nueva para ese slot.
+
+3. **Render dashboard**: el servicio debe estar **Live**, el health check en
+   verde y los logs sin `500`. La primera visita tras el idle tarda por el cold
+   start de Render + Neon.
+
+4. **Demo**: `https://<servicio>.onrender.com/demo` → elegir un slot, crear un
+   hold, ver el banner verde; tocar un slot ocupado y ver el 409; simular N
+   intentos y ver 1 verde + N-1 rojas.
+
 ## Troubleshooting
 
 - **`CREATE EXTENSION btree_gist`**: Neon lo permite; si el rol no puede, correrla

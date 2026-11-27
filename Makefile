@@ -11,7 +11,7 @@ K6_RESOURCE ?= 00000000-0000-4000-8000-000000000001
 N ?= 100
 K6 ?= docker run --rm --network $(K6_NETWORK) -v "$(CURDIR)/k6:/scripts:ro" -e BASE_URL=$(K6_BASE_URL) -e RESOURCE_ID=$(K6_RESOURCE) -e N=$(N) grafana/k6
 
-.PHONY: up down build shell setup fresh migrate test test-db lint logs psql fix-perms k6 k6-same k6-distinct k6-retry
+.PHONY: up down build shell setup fresh migrate test test-db lint logs psql fix-perms k6 k6-same k6-distinct k6-retry smoke
 
 up: ## Levanta DB + app + nginx
 	$(COMPOSE) up -d --build
@@ -59,6 +59,11 @@ k6-retry: ## k6: misma Idempotency-Key concurrente → mismo id
 	$(K6) run /scripts/idempotent-retry.js
 
 k6: k6-same k6-distinct k6-retry ## Los tres escenarios de carga
+
+BASE_URL ?= http://localhost:8000
+
+smoke: ## Smoke test contra BASE_URL (local o deploy)
+	BASE_URL=$(BASE_URL) python3 scripts/smoke.py
 
 logs:
 	$(COMPOSE) logs -f app nginx

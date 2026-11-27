@@ -81,6 +81,7 @@ Otros comandos:
 ```bash
 make test     # 41 tests contra PostgreSQL (crea slotlock_test si falta)
 make k6       # same-slot + distinct-slots + idempotent-retry
+make smoke    # smoke test contra http://localhost:8000
 make fresh    # migrate:fresh + seed (borra los datos de demo)
 make psql     # sesión psql sobre la DB de desarrollo
 make lint     # Pint en modo verificación
@@ -295,6 +296,19 @@ El índice del `EXCLUDE` también sirve la consulta de disponibilidad: no hay un
 `composer install`, migraciones, **aserción de que `reservations_no_overlap` existe**,
 `php artisan test` y `pint --test`.
 
+### 5. Smoke test (local o deploy)
+
+```bash
+make smoke                                  # local
+make smoke BASE_URL=https://slotlock-demo.onrender.com   # deploy
+```
+
+Verifica en orden: `health` (app + DB), recursos, disponibilidad, alta de un
+hold, replay con la misma `Idempotency-Key` (mismo id + header), conflicto
+`409 slot_already_taken`, simulación de 10 → 1 creada / 9 rechazadas y
+cancelación `204`. El script es [`scripts/smoke.py`](scripts/smoke.py) y solo
+necesita Python 3.
+
 ## Modelo de datos
 
 ```
@@ -347,7 +361,7 @@ docs/                      # plan, ADRs, specs, EXPLAIN, evidencia k6 y capturas
 k6/                        # same-slot, distinct-slots, idempotent-retry
 public/                    # css/js de la demo + htmx vendorizado
 resources/views/demo/      # grilla, reserva y simulación (HTMX)
-scripts/                   # hold.sh y concurrency.sh (verificación manual)
+scripts/                   # hold.sh, concurrency.sh y smoke.py (verificación)
 tests/Feature/             # la suite contra PostgreSQL real
 ```
 

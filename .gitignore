@@ -23,3 +23,7 @@
 /vendor
 # SlotLock / Docker
 pgdata/
+
+# Python
+__pycache__/
+*.pyc
