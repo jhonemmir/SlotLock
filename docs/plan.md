@@ -44,10 +44,10 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 - [x] Traducción de errores PG (`23P01` → 409) y errores de dominio (410/422/400).
 - [x] Validación: duración, granularidad 15 min en la zona del recurso, futuro, `max_duration_minutes`.
 - [x] Idempotencia con hash canónico (endpoint + usuario + payload) y replay cacheado.
-- [ ] Autenticación y ownership ("solo el dueño cancela") — v2; hoy es una demo abierta.
+- [ ] Autenticación y ownership ("solo el dueño cancela") — v2; el gatekeeping actual es público y no valida ownership.
 - [x] Validación de `opening_hours` (por día, con ventanas nocturnas) en reservas,
   waitlist y disponibilidad.
-- [ ] Rate limiting.
+- [ ] Rate limiting global — hoy hay `throttle` en waitlist, simulación y demo; falta en reservas, confirmación y cancelación.
 - **Entregable:** ciclo completo probado con `.http`/curl y tests. ✅
 
 ## Fase 3 — Prueba de carga (evidencia técnica) ✅
@@ -127,10 +127,10 @@ Filosofía: **núcleo sólido primero, capas recortables después.** Cada fase t
 | Frontend consume tiempo | HTMX mínimo, sin SPA; landing estática ya lista |
 | Tests contra SQLite | Prohibido: `phpunit.xml` fuerza PostgreSQL |
 
-## Orden de entrega recomendado para el portafolio
+## Siguientes pasos (v2)
 
-1. **Deploy** (fase 7): lo que falta para publicar.
-2. Auth/ownership (v2) y, si se quiere, capacidad compartida.
+1. Auth/ownership real ("solo el dueño cancela") y rate limiting en todas las escrituras.
+2. Capacidad compartida (`capacity > 1`), si se quiere.
 3. Programa en C/Go (opcional).
 
 **Nunca cortar:** la restricción, los tests contra PostgreSQL y los planes de ejecución. Son el corazón del proyecto.

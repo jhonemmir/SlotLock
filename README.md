@@ -8,8 +8,8 @@
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Estado:** **v1 completo** y desplegado en Render + Neon (free) — fases 0 a 7 cerradas (C/Go opcional fuera de scope).
-Auth/ownership queda para v2, fuera del scope de v1. Ver [`docs/plan.md`](docs/plan.md).
+**Estado:** **v1 completo** y desplegado en Render + Neon (free): fases 0–7 cerradas.
+Auth/ownership y rate limiting global quedan para v2; C/Go opcional fuera de scope. Ver [`docs/plan.md`](docs/plan.md).
 
 ---
 
@@ -352,11 +352,11 @@ Decisiones de arquitectura:
 - **Sin autenticación**: `user_id` es opcional en reservas y obligatorio en waitlist; `X-Demo-Key` es solo gatekeeping público, no auth ni ownership.
 - **`capacity = 1`** por `CHECK`: recursos compartidos requieren otra estrategia.
 - **Deploy**: la demo está en Render free + Neon free; puede dormir por inactividad (cold start ~1 min). Guía en [`docs/deploy.md`](docs/deploy.md).
-- **Repo privado**: se puede hacer público cuando quieras; el deploy no depende de eso.
+- **Rate limiting parcial**: hay `throttle` en waitlist, simulación y demo; reservas, confirmación y cancelación todavía no tienen límite propio.
 
 ## Stack
 
-- PHP **8.4** + Laravel **13** (el lock exige ≥ 8.4.1 por Symfony 8; el README anterior decía 8.3 y era incorrecto).
+- PHP **8.4** + Laravel **13** (Symfony 8 exige PHP ≥ 8.4.1).
 - PostgreSQL **16** con `btree_gist`.
 - nginx + PHP-FPM (40 workers) en Docker Compose.
 - Blade + HTMX 2.0.8 (vendorizado, sin build) para la demo.

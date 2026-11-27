@@ -112,7 +112,7 @@ El `ORDER BY id` fija el orden de locks entre transacciones concurrentes. El `IN
 - Cada uno intenta `INSERT`. La restricción serializa.
 - Se mide: tiempo total, éxitos (esperado: 1), rechazos (49), errores inesperados (esperado: 0).
 
-**Resultado esperado en README:** tabla con N, éxitos, rechazos, p95 de latencia, throughput. **Pendiente (fase 3).**
+**Resultado:** documentado en [`docs/evidence/k6.md`](../evidence/k6.md): 100 VUs al mismo slot → 1×201 y 99×409; la simulación de la demo muestra el mismo patrón (1 creada / N-1 rechazadas).
 
 Cada VU debe enviar una `Idempotency-Key` **distinta**; si comparten clave, el test mide replays de idempotencia (N × 201) y no la exclusión. El escenario de retry es el único que reusa la clave.
 
