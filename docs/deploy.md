@@ -210,6 +210,19 @@ corrección.
 
 ## Troubleshooting
 
+- **Deploy "in progress" sin respuesta**: mirá si está en **Build** o **Runtime**.
+  - Build: el plan free tarda varios minutos; esperá y revisá los logs.
+  - Runtime: buscá `SQLSTATE`, `could not connect` o `migrate failed`. Casi siempre
+    es `DATABASE_URL` (usar la directa de Neon, sin `-pooler`), `DB_SSLMODE` o
+    Neon dormido.
+  - Probá la DB desde tu máquina:
+    ```bash
+    docker run --rm postgres:16-alpine \
+      psql "postgresql://.../neondb?sslmode=require" -c 'select 1;'
+    ```
+  - Para destrabar el arranque y ver la app: poné `RUN_MIGRATIONS=false` y
+    redeployá. Si arranca, el problema es la DB/migraciones; corregila y volvé a
+    `true`.
 - **`CREATE EXTENSION btree_gist`**: Neon lo permite; si el rol no puede, correrla
   desde el SQL Editor. Sin la extensión, la restricción `EXCLUDE` no se crea.
 - **500 al arrancar**: revisar `APP_KEY`, `DATABASE_URL` y logs (`LOG_CHANNEL=stderr`).
